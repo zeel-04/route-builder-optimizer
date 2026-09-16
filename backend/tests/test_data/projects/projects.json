@@ -1,0 +1,79 @@
+[
+  {
+    "id": "PROJ-LIST-001",
+    "description": "List own tenant's projects, ordered by name",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": {"__count__": 2, "name": "Project A"}
+  },
+  {
+    "id": "PROJ-LIST-002",
+    "description": "List projects without a token",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-LIST-003",
+    "description": "Tenant B only sees its own project",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_b}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": {"__count__": 1, "name": "Project B"}
+  },
+  {
+    "id": "PROJ-DETAIL-001",
+    "description": "Get own project with its customer and route counts",
+    "method": "GET",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": {"name": "Project A", "customer_count": 3, "route_count": 1}
+  },
+  {
+    "id": "PROJ-DETAIL-002",
+    "description": "Get project detail without a token",
+    "method": "GET",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-DETAIL-003",
+    "description": "Tenant A cannot get tenant B's project",
+    "method": "GET",
+    "endpoint": "/api/projects/{tenant_b_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 404,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-DETAIL-004",
+    "description": "A project id that isn't a UUID is a 404, not a validation error",
+    "method": "GET",
+    "endpoint": "/api/projects/not-a-uuid/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 404,
+    "expected_body": null
+  }
+]

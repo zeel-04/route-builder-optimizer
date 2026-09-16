@@ -1,0 +1,46 @@
+[
+  {
+    "id": "PLACE-SEARCH-001",
+    "description": "Search matches a place",
+    "method": "GET",
+    "endpoint": "/api/places/search/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"state": "NJ", "county": "Essex", "city": "Newark", "address": "12 Main St"},
+    "expected_status": 200,
+    "expected_body": {"latitude": 40.73, "longitude": -74.17, "label": "12 Main St, Newark, NJ"}
+  },
+  {
+    "id": "PLACE-SEARCH-002",
+    "description": "Search without a token",
+    "method": "GET",
+    "endpoint": "/api/places/search/",
+    "headers": {},
+    "payload": null,
+    "query_params": {"address": "12 Main St"},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PLACE-SEARCH-003",
+    "description": "All params blank",
+    "method": "GET",
+    "endpoint": "/api/places/search/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"state": "", "city": ""},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "PLACE-SEARCH-004",
+    "description": "Geocoder finds nothing",
+    "method": "GET",
+    "endpoint": "/api/places/search/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"city": "Nowhere"},
+    "expected_status": 404,
+    "expected_body": {"message": "No place matches that search.", "extra": {}}
+  }
+]

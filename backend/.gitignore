@@ -1,0 +1,5 @@
+.env
+geocode.log
+.venv/
+__pycache__/
+*.pyc

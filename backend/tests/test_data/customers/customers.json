@@ -1,0 +1,123 @@
+[
+  {
+    "id": "CUST-LIST-001",
+    "description": "List own project's customers, filtered to one by search",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "search": "{cust_a_free_zip}"},
+    "expected_status": 200,
+    "expected_body": {"__count__": 1, "customer_code": "A-FREE-1", "state": "NY"}
+  },
+  {
+    "id": "CUST-LIST-002",
+    "description": "List customers without a token",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}"},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "CUST-LIST-003",
+    "description": "Tenant A cannot see tenant B's customers",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "search": "{cust_b_taken_zip}"},
+    "expected_status": 200,
+    "expected_body": []
+  },
+  {
+    "id": "CUST-LIST-004",
+    "description": "Filter customers by state with no matches",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "state": "ca"},
+    "expected_status": 200,
+    "expected_body": []
+  },
+  {
+    "id": "CUST-LIST-005",
+    "description": "List customers without a project is a validation error",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "CUST-LIST-006",
+    "description": "Tenant A cannot list customers in tenant B's project",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_b_project_id}"},
+    "expected_status": 404,
+    "expected_body": null
+  },
+  {
+    "id": "CUST-LIST-007",
+    "description": "The same customer code exists in a second project as its own row",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project2_id}", "search": "{cust_a_free_zip}"},
+    "expected_status": 200,
+    "expected_body": {"__count__": 1, "customer_code": "A-FREE-1", "id": "{tenant_a_project2_customer_id}"}
+  },
+  {
+    "id": "CUST-FILTEROPT-001",
+    "description": "Filter options only reflect the caller's project",
+    "method": "GET",
+    "endpoint": "/api/customers/filter-options/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}"},
+    "expected_status": 200,
+    "expected_body": {"states": ["NY"], "counties": ["Albany"]}
+  },
+  {
+    "id": "CUST-FILTEROPT-002",
+    "description": "Filter options without a token",
+    "method": "GET",
+    "endpoint": "/api/customers/filter-options/",
+    "headers": {},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}"},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "CUST-FILTEROPT-003",
+    "description": "Filter options without a project is a validation error",
+    "method": "GET",
+    "endpoint": "/api/customers/filter-options/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "CUST-FILTEROPT-004",
+    "description": "Tenant A cannot get filter options for tenant B's project",
+    "method": "GET",
+    "endpoint": "/api/customers/filter-options/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_b_project_id}"},
+    "expected_status": 404,
+    "expected_body": null
+  }
+]

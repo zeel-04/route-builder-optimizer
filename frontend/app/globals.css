@@ -1,0 +1,36 @@
+@layer reset, astryx-base, astryx-theme;
+
+@import '@astryxdesign/core/reset.css';
+@import '@astryxdesign/core/astryx.css';
+@import '@astryxdesign/theme-neutral/theme.css';
+@import 'leaflet/dist/leaflet.css';
+
+/* Pins: no tap highlight or focus box around the circle itself. */
+.leaflet-interactive {
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.route-pin path {
+  stroke-width: 1;
+}
+.route-pin:hover path {
+  stroke-width: 2.5;
+}
+
+/* Pin hover card: Leaflet's tooltip box dressed as an Astryx popover. */
+.leaflet-tooltip.route-pin-tip {
+  padding: var(--spacing-3) var(--spacing-4);
+  width: max-content; /* the tooltip pane is 0 wide, so normal wrapping would break every word */
+  max-width: 260px;
+  white-space: normal;
+  background: var(--color-background-popover);
+  color: var(--color-text-primary);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-element);
+  box-shadow: var(--shadow-med);
+  font-family: inherit;
+}
+.leaflet-tooltip.route-pin-tip::before {
+  border-top-color: var(--color-background-popover);
+}
