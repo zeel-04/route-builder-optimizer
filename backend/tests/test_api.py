@@ -1,3 +1,6 @@
+from django.test import override_settings
+
+
 def _assert_body(actual, expected):
     """Subset match per the django-testing skill, extended for our bare-array
     list endpoints (no envelope/pagination):
@@ -40,10 +43,12 @@ def test_api_case(api, db, placeholders, substitute, case):
     query_params = substitute(case.get("query_params", {}), placeholders)
     expected_body = substitute(case["expected_body"], placeholders)
 
-    response = api.request(
-        case["method"], endpoint, json_body=payload, headers=headers, params=query_params,
-        files=case.get("files"),  # optional: multipart upload cases only
-    )
+    # Optional per-case Django settings (e.g. {"SSO_ENABLED": true}).
+    with override_settings(**case.get("settings", {})):
+        response = api.request(
+            case["method"], endpoint, json_body=payload, headers=headers, params=query_params,
+            files=case.get("files"),  # optional: multipart upload cases only
+        )
 
     assert response.status_code == case["expected_status"], response.content
     # Optional, for non-JSON responses (CSV export): exact header / body match.

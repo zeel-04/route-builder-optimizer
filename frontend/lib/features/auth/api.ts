@@ -4,7 +4,8 @@ import { cookies } from 'next/headers'
 import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { ApiError, apiFetch, apiFetchPublic } from '@/lib/client'
-import { SESSION_COOKIE, verifySession } from '@/lib/dal'
+import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, verifySession } from '@/lib/dal'
+import { oidcConfig, ssoEnabled } from './oidc'
 import { loginInputSchema, loginResponseSchema, userSchema } from './schema'
 
 export async function getMe() {
@@ -31,12 +32,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     throw err
   }
 
-  ;(await cookies()).set(SESSION_COOKIE, token, {
-    httpOnly: true,
-    sameSite: 'lax',
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-  })
+  ;(await cookies()).set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS)
   redirect('/projects')
 }
 
@@ -51,5 +47,10 @@ export async function logoutAction() {
     if (!(err instanceof ApiError)) throw err // token already dead: still clear the cookie
   }
   ;(await cookies()).delete(SESSION_COOKIE)
-  redirect('/login')
+  if (!ssoEnabled) redirect('/login')
+
+  // End the IdP session too, otherwise the next sign-in silently re-authenticates.
+  const { end_session_endpoint } = await oidcConfig()
+  const params = new URLSearchParams({ post_logout_redirect_uri: `${process.env.APP_URL}/login` })
+  redirect(`${end_session_endpoint}?${params}`)
 }

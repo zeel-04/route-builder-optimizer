@@ -21,3 +21,7 @@ class AuthLoginInputSerializer(serializers.Serializer):
 class AuthLoginOutputSerializer(serializers.Serializer):
     token = serializers.CharField()
     user = UserOutputSerializer()
+
+
+class AuthSSOLoginInputSerializer(serializers.Serializer):
+    id_token = serializers.CharField()

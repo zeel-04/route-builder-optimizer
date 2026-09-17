@@ -90,3 +90,4 @@ REST_FRAMEWORK = {
 
 from config.settings.database import *  # noqa
 from config.settings.geocoding import *  # noqa
+from config.settings.sso import *  # noqa

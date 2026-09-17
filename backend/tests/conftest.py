@@ -4,6 +4,7 @@ import uuid
 from pathlib import Path
 from urllib.parse import urlencode
 
+import jwt
 import pytest
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
@@ -11,6 +12,7 @@ from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
 
 from api.accounts.models import Tenant, User
+from api.accounts.services import auth_services
 from api.customers.geocoders import NominatimGeocoder
 from api.customers.models import Customer
 from api.customers.schema import PlaceResult
@@ -187,6 +189,25 @@ def _fake_search_place(self, **parts):
 @pytest.fixture(autouse=True)
 def _no_network_geocoder(monkeypatch):
     monkeypatch.setattr(NominatimGeocoder, "search_place", _fake_search_place)
+
+
+def _fake_verify_id_token(id_token: str) -> dict:
+    """Stands in for OIDC discovery + JWT verification, so no test hits the
+    network. The token string is the email to sign in as; "bad-token" fails
+    verification and "no-email" verifies but carries no email claim."""
+    if id_token == "bad-token":
+        raise jwt.InvalidTokenError("signature verification failed")
+    if id_token == "no-email":
+        return {"sub": "abc123"}
+    return {"sub": "abc123", "email": id_token}
+
+
+@pytest.fixture(autouse=True)
+def _no_network_oidc(monkeypatch, settings):
+    monkeypatch.setattr(auth_services, "_verify_id_token", _fake_verify_id_token)
+    # The suite must not depend on the developer's own .env: cases that need
+    # SSO turn it on themselves via their "settings" key.
+    settings.SSO_ENABLED = False
 
 
 @pytest.fixture

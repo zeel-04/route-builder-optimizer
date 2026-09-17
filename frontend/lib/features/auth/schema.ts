@@ -12,6 +12,11 @@ export const loginResponseSchema = z.object({
   user: userSchema,
 })
 
+/** Authentik's token endpoint response. Only the ID token is handed to the backend. */
+export const tokenResponseSchema = z.object({
+  id_token: z.string(),
+})
+
 export const loginInputSchema = z.object({
   email: z.email('Enter a valid email address.'),
   password: z.string().min(1, 'Enter your password.'),
