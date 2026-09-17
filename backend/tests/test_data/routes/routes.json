@@ -262,5 +262,40 @@
     "query_params": {},
     "expected_status": 404,
     "expected_body": null
+  },
+  {
+    "id": "ROUTE-EXPORT-001",
+    "description": "Export a route's stops as CSV, in stop order",
+    "method": "GET",
+    "endpoint": "/api/routes/{tenant_a_route_id}/export/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": null,
+    "expected_headers": {"Content-Type": "text/csv; charset=utf-8", "Content-Disposition": "attachment; filename=\"route-a.csv\""},
+    "expected_text": "stop,customer_code,name,address,address2,state,zipcode,city,county,latitude,longitude\r\n1,A-TAKEN-1,A Taken One,3 Elm St,,NY,12203,Albany,Albany,,\r\n"
+  },
+  {
+    "id": "ROUTE-EXPORT-002",
+    "description": "Export without a token",
+    "method": "GET",
+    "endpoint": "/api/routes/{tenant_a_route_id}/export/",
+    "headers": {},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "ROUTE-EXPORT-003",
+    "description": "Tenant A cannot export tenant B's route",
+    "method": "GET",
+    "endpoint": "/api/routes/{tenant_b_route_id}/export/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 404,
+    "expected_body": null
   }
 ]

@@ -6,17 +6,18 @@ from api.projects.models import Project
 
 
 class Command(BaseCommand):
-    help = "Import customers from Pricecenter's Excel export into a tenant's project."
+    help = "Import customers from a CSV file (UTF-8) into a tenant's project."
 
     def add_arguments(self, parser):
-        parser.add_argument("xlsx_path")
+        parser.add_argument("csv_path")
         parser.add_argument("--tenant", required=True)
         parser.add_argument("--project", required=True)
 
     def handle(self, *args, **options):
         tenant, _ = Tenant.objects.get_or_create(name=options["tenant"])
         project, _ = Project.objects.get_or_create(tenant=tenant, name=options["project"])
-        result = CustomerImportService().execute(project=project, xlsx_path=options["xlsx_path"])
+        with open(options["csv_path"], encoding="utf-8-sig", newline="") as file:
+            result = CustomerImportService().execute(project=project, file=file)
         self.stdout.write(
             self.style.SUCCESS(
                 f"Imported {result.total} customers "

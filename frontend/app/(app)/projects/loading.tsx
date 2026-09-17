@@ -8,7 +8,7 @@ export default function Loading() {
       contentWidth={960}
       padding={4}
       header={
-        <LayoutHeader>
+        <LayoutHeader paddingBlockEnd={6} style={{ paddingBlockStart: 'var(--spacing-4)' }}>
           <HStack justify="between" align="center">
             <Skeleton width={120} height={32} />
             <Skeleton width={110} height={32} index={1} />

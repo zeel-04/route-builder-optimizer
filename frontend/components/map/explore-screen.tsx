@@ -59,6 +59,10 @@ function SearchToolbar({ query, isMissing }: { query: PlaceQuery; isMissing: boo
     startTransition(() => router.replace(params.size ? `${pathname}?${params}` : pathname))
   }
 
+  const hasSearch = Object.values(query).some(Boolean)
+  // Drops the pin and empties the inputs (the toolbar remounts); the map keeps its view.
+  const clear = () => startTransition(() => router.replace(pathname))
+
   return (
     <LayoutHeader hasDivider>
       <form onSubmit={search} aria-label="Search for a place">
@@ -106,6 +110,7 @@ function SearchToolbar({ query, isMissing }: { query: PlaceQuery; isMissing: boo
             hasClear
           />
           <Button type="submit" size="sm" variant="primary" label="Search" isLoading={isPending} />
+          {hasSearch && <Button size="sm" variant="secondary" label="Clear" onClick={clear} isDisabled={isPending} />}
           {isMissing && !isPending && (
             <HStack gap={1} align="center" role="status">
               <Icon icon="error" size="sm" color="error" />

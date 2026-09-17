@@ -34,3 +34,26 @@
 .leaflet-tooltip.route-pin-tip::before {
   border-top-color: var(--color-background-popover);
 }
+
+/* Native color input as a solid circle: drop the browser's inner padding and swatch border. */
+.color-swatch {
+  width: var(--spacing-6);
+  height: var(--spacing-6);
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  cursor: pointer;
+  overflow: hidden;
+}
+.color-swatch::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.color-swatch::-webkit-color-swatch {
+  border: none;
+  border-radius: 50%;
+}
+.color-swatch::-moz-color-swatch {
+  border: none;
+  border-radius: 50%;
+}

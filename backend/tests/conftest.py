@@ -5,6 +5,7 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 import pytest
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
 from rest_framework.authtoken.models import Token
 from rest_framework.test import APIClient
@@ -52,6 +53,7 @@ def _seed():
     cust_a_free2 = Customer.objects.create(
         tenant=tenant_a, project=project_a, customer_code="A-FREE-2", name="A Free Two",
         address="2 Elm St", city="Albany", county="Albany", state="NY", zipcode="12202",
+        latitude=42.65, longitude=-73.75, location_accuracy="street",  # geocoded
     )
     cust_a_taken = Customer.objects.create(
         tenant=tenant_a, project=project_a, customer_code="A-TAKEN-1", name="A Taken One",
@@ -154,13 +156,20 @@ class ApiClient:
         self.client = APIClient()
         self.base_url = ""
 
-    def request(self, method, url, json_body=None, headers=None, params=None):
+    def request(self, method, url, json_body=None, headers=None, params=None, files=None):
         extra = {}
         for key, value in (headers or {}).items():
             if key.lower() == "authorization":
                 extra["HTTP_AUTHORIZATION"] = value
             else:
                 extra[f"HTTP_{key.upper().replace('-', '_')}"] = value
+        if files is not None:  # multipart: each files entry is {field: text content}
+            data = {**(json_body or {})}
+            for field, content in files.items():
+                data[field] = SimpleUploadedFile(f"{field}.csv", content.encode("utf-8"))
+            return getattr(self.client, method.lower())(
+                url, data=data, format="multipart", QUERY_STRING=urlencode(params or {}), **extra
+            )
         body = json.dumps(json_body) if json_body is not None else None
         return self.client.generic(
             method, url, data=body, content_type="application/json",

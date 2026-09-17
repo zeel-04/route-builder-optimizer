@@ -1,9 +1,14 @@
+import csv
+
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.http import Http404
+from django.http import Http404, HttpResponse
 from django.shortcuts import get_object_or_404
+from django.utils.text import slugify
+from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.viewsets import ViewSet
 
+from api.customers.views.customer_view import EXPORT_COLUMNS
 from api.projects.models import Project
 from api.routes.selectors import route_detail, route_list
 from api.routes.serializers.route_serializers import (
@@ -71,3 +76,16 @@ class RouteViewSet(ViewSet):
         route = _get_route_or_404(tenant=request.user.tenant, route_id=pk)
         RouteDeleteService().execute(route=route)
         return Response(status=204)
+
+    @action(detail=True)
+    def export(self, request, pk=None):
+        route = _get_route_or_404(tenant=request.user.tenant, route_id=pk)
+        filename = f"{slugify(route.name) or 'route'}.csv"
+        response = HttpResponse(content_type="text/csv; charset=utf-8")
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        writer = csv.writer(response)
+        writer.writerow(["stop", *EXPORT_COLUMNS])
+        fields = [f"customer__{column}" for column in EXPORT_COLUMNS]
+        for row in route.stops.order_by("sequence").values_list("sequence", *fields):
+            writer.writerow(["" if value is None else value for value in row])
+        return response

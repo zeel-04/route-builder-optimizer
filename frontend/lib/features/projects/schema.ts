@@ -8,3 +8,7 @@ export const projectSchema = z.object({
   created_at: z.string(),
   updated_at: z.string(),
 })
+
+export const projectCreateSchema = z.object({
+  name: z.string().trim().min(1, 'Enter a project name.').max(200, 'Keep the name under 200 characters.'),
+})

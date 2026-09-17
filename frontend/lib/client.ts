@@ -27,7 +27,8 @@ async function request<T>(
   const res = await fetch(`${process.env.API_URL}${path}`, {
     ...init,
     headers: {
-      'Content-Type': 'application/json',
+      // FormData bodies need fetch to set the multipart boundary itself.
+      ...(init?.body instanceof FormData ? {} : { 'Content-Type': 'application/json' }),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...init?.headers,
     },
@@ -60,6 +61,31 @@ export async function apiFetch<T>(
   }
 }
 
+/** Authenticated call that hands back the raw response, for non-JSON bodies like file downloads. */
+export async function apiFetchRaw(path: string): Promise<Response> {
+  const { token } = await verifySession()
+  const res = await fetch(`${process.env.API_URL}${path}`, { headers: { Authorization: `Bearer ${token}` } })
+  if (res.status === 401) redirect('/login')
+  if (!res.ok) throw new ApiError(res.status, res.statusText)
+  return res
+}
+
+/** Proxies a backend file download so the token never reaches the browser. */
+export async function proxyDownload(path: string): Promise<Response> {
+  try {
+    const res = await apiFetchRaw(path)
+    const headers = new Headers()
+    for (const name of ['Content-Type', 'Content-Disposition']) {
+      const value = res.headers.get(name)
+      if (value) headers.set(name, value)
+    }
+    return new Response(res.body, { headers })
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 404) return new Response('Not found', { status: 404 })
+    throw err
+  }
+}
+
 /** Unauthenticated call. Only sign-in needs it. */
 export async function apiFetchPublic<T>(
   path: string,
@@ -67,4 +93,24 @@ export async function apiFetchPublic<T>(
   init?: RequestInit,
 ): Promise<T> {
   return request(path, schema, init)
+}
+
+const validationExtraSchema = z.object({
+  fields: z.record(z.string(), z.array(z.string())),
+})
+
+/**
+ * Splits a DRF validation 400 (`extra.fields`) into per-field errors for the form's own
+ * fields and one form-level message for everything else (non_field_errors, unknown keys).
+ */
+export function validationErrors(err: ApiError, formFields: readonly string[]) {
+  const parsed = validationExtraSchema.safeParse(err.extra)
+  const errors: Record<string, string[]> = {}
+  const other: string[] = []
+  for (const [key, messages] of Object.entries(parsed.success ? parsed.data.fields : {})) {
+    if (formFields.includes(key)) errors[key] = messages
+    else other.push(...messages)
+  }
+  const message = other.join(' ') || (Object.keys(errors).length ? undefined : err.message)
+  return { message, errors }
 }

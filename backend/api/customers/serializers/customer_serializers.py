@@ -51,3 +51,35 @@ class CustomerFilterOptionsOutputSerializer(serializers.Serializer):
     states = serializers.ListField(child=serializers.CharField())
     counties = serializers.ListField(child=serializers.CharField())
     cities = serializers.ListField(child=serializers.CharField())
+
+
+class CustomerCreateInputSerializer(serializers.Serializer):
+    customer_code = serializers.CharField(max_length=50)
+    name = serializers.CharField(max_length=255)
+    address = serializers.CharField(max_length=255)
+    address2 = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    state = serializers.CharField(min_length=2, max_length=2)
+    zipcode = serializers.CharField(max_length=10)
+
+
+class ProjectCustomerListFilterSerializer(serializers.Serializer):
+    search = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class CustomerUpdateInputSerializer(serializers.Serializer):
+    customer_code = serializers.CharField(max_length=50, required=False)
+    name = serializers.CharField(max_length=255, required=False)
+    address = serializers.CharField(max_length=255, required=False)
+    address2 = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    state = serializers.CharField(min_length=2, max_length=2, required=False)
+    zipcode = serializers.CharField(max_length=10, required=False)
+
+
+class CustomerImportInputSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+
+class CustomerImportOutputSerializer(serializers.Serializer):
+    created = serializers.IntegerField()
+    updated = serializers.IntegerField()
+    total = serializers.IntegerField()

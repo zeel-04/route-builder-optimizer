@@ -75,5 +75,60 @@
     "query_params": {},
     "expected_status": 404,
     "expected_body": null
+  },
+  {
+    "id": "PROJ-CREATE-001",
+    "description": "Create a project in own tenant; counts start at 0",
+    "method": "POST",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Project New"},
+    "query_params": {},
+    "expected_status": 201,
+    "expected_body": {"name": "Project New", "customer_count": 0, "route_count": 0}
+  },
+  {
+    "id": "PROJ-CREATE-002",
+    "description": "Create project without a token",
+    "method": "POST",
+    "endpoint": "/api/projects/",
+    "headers": {},
+    "payload": {"name": "X"},
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-CREATE-003",
+    "description": "Create project with no name",
+    "method": "POST",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {},
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "PROJ-CREATE-004",
+    "description": "Duplicate project name in the same tenant",
+    "method": "POST",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Project A"},
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "PROJ-CREATE-005",
+    "description": "Another tenant may reuse a project name",
+    "method": "POST",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_b}"},
+    "payload": {"name": "Project A"},
+    "query_params": {},
+    "expected_status": 201,
+    "expected_body": {"name": "Project A", "customer_count": 0}
   }
 ]

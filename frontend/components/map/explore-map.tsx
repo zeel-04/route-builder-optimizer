@@ -33,8 +33,8 @@ function FlyTo({ place, zoom }: { place: Place | null; zoom: number }) {
   const lat = place?.latitude
   const lng = place?.longitude
   useEffect(() => {
-    if (lat === undefined || lng === undefined) map.setView(DEFAULT_CENTER, DEFAULT_ZOOM)
-    else map.flyTo([lat, lng], zoom)
+    // No place (e.g. search cleared): leave the view where the user has it.
+    if (lat !== undefined && lng !== undefined) map.flyTo([lat, lng], zoom)
   }, [map, lat, lng, zoom])
   return null
 }

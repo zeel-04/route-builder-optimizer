@@ -1,29 +1,48 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { type ReactNode, type SVGProps, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AlertDialog } from '@astryxdesign/core/AlertDialog'
 import { Button } from '@astryxdesign/core/Button'
 import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { Heading } from '@astryxdesign/core/Heading'
+import { Icon } from '@astryxdesign/core/Icon'
 import { Layout, LayoutContent, LayoutHeader } from '@astryxdesign/core/Layout'
 import { Link } from '@astryxdesign/core/Link'
 import { MoreMenu } from '@astryxdesign/core/MoreMenu'
-import { HStack } from '@astryxdesign/core/Stack'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { pixel, Table, type TableColumn, type TablePlugin } from '@astryxdesign/core/Table'
+import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Text } from '@astryxdesign/core/Text'
+import { TextInput } from '@astryxdesign/core/TextInput'
 import { Timestamp } from '@astryxdesign/core/Timestamp'
 import { useToast } from '@astryxdesign/core/Toast'
 import { RouteColorDot } from '@/components/route-color-dot'
+import { useUrlSearch } from '@/components/use-url-search'
 import type { Project } from '@/lib/features/projects/types'
 import { deleteRouteAction } from '@/lib/features/routes/api'
 import type { Route } from '@/lib/features/routes/types'
 
-export function RoutesScreen({ project, routes }: { project: Project; routes: Route[] }) {
+export type ProjectTab = 'routes' | 'customers'
+
+type Props = {
+  project: Project
+  /** Already filtered by `search` (the `?q=` route-name search). */
+  routes: Route[]
+  search: string
+  /** Whether the project has any routes at all, regardless of `search`. */
+  hasRoutes: boolean
+  tab: ProjectTab
+  children?: ReactNode
+}
+
+/** Tabs live in `?tab=`; `children` is the Customers tab's content. */
+export function RoutesScreen({ project, routes, search, hasRoutes, tab, children }: Props) {
   const router = useRouter()
   const toast = useToast()
   const [deleting, setDeleting] = useState<Route | null>(null)
   const [isDeleting, startDelete] = useTransition()
+  const { text, setText, clear: clearSearch, isSearching } = useUrlSearch(search)
   const mapHref = `/projects/${project.id}/map`
   const routeHref = (route: Route) => `${mapHref}?route=${route.id}`
 
@@ -81,17 +100,28 @@ export function RoutesScreen({ project, routes }: { project: Project; routes: Ro
     {
       key: 'id',
       header: '',
-      width: pixel(56),
+      width: pixel(130),
       align: 'end',
       renderCell: (route) => (
-        <MoreMenu
-          label={`Actions for ${route.name}`}
-          size="sm"
-          alignment="end"
-          items={[
-            { label: 'Delete', variant: 'destructive', onClick: () => setDeleting(route) },
-          ]}
-        />
+        <HStack gap={1} align="center" justify="end">
+          {/* A plain <a>, not the app's Next Link: the export route answers with a file download. */}
+          <Button
+            variant="ghost"
+            size="sm"
+            label="CSV"
+            icon={<Icon icon={DownloadIcon} size="sm" />}
+            href={`/projects/${project.id}/routes/${route.id}/export`}
+            as="a"
+          />
+          <MoreMenu
+            label={`Actions for ${route.name}`}
+            size="sm"
+            alignment="end"
+            items={[
+              { label: 'Delete', variant: 'destructive', onClick: () => setDeleting(route) },
+            ]}
+          />
+        </HStack>
       ),
     },
   ]
@@ -102,25 +132,58 @@ export function RoutesScreen({ project, routes }: { project: Project; routes: Ro
         contentWidth={960}
         padding={4}
         header={
-          <LayoutHeader>
-            <HStack justify="between" align="center">
-              <Heading level={1}>{project.name}</Heading>
-              <Button variant="primary" label="New route" href={mapHref} />
-            </HStack>
+          <LayoutHeader paddingBlockEnd={2} style={{ paddingBlockStart: 'var(--spacing-4)' }}>
+            <Heading level={1}>{project.name}</Heading>
           </LayoutHeader>
         }
         content={
           // padding={4}: Table bleeds 16px, and the scrolling content region would clip its header otherwise
           <LayoutContent padding={4}>
-            {routes.length === 0 ? (
-              <EmptyState
-                title="No routes yet"
-                description="Build the first one by picking customer pins on the map."
-                actions={<Button variant="primary" label="Go to map" href={mapHref} />}
-              />
-            ) : (
-              <Table data={routes} columns={columns} idKey="id" hasHover plugins={{ rowLink }} />
-            )}
+            <VStack gap={6}>
+              {/* Tabs are links, so each tab is a shareable URL; navigation does the switching. */}
+              <TabList value={tab} onChange={() => {}} hasDivider>
+                <Tab value="routes" label="Routes" href={`/projects/${project.id}`} />
+                <Tab value="customers" label="Customers" href={`/projects/${project.id}?tab=customers`} />
+              </TabList>
+              {tab === 'customers' ? (
+                children
+              ) : (
+              <VStack gap={4}>
+                {hasRoutes && (
+                  <HStack justify="between" align="center" gap={2} wrap="wrap">
+                    <TextInput
+                      width={280}
+                      label="Search routes"
+                      isLabelHidden
+                      placeholder="Search routes"
+                      startIcon="search"
+                      value={text}
+                      onChange={setText}
+                      hasClear
+                      isLoading={isSearching}
+                    />
+                    <Button variant="primary" label="New route" href={mapHref} />
+                  </HStack>
+                )}
+                {!hasRoutes ? (
+                  <EmptyState
+                    title="No routes yet"
+                    description="Build the first one by picking customer pins on the map."
+                    actions={<Button variant="primary" label="Go to map" href={mapHref} />}
+                  />
+                ) : routes.length === 0 ? (
+                  <EmptyState
+                    icon={<Icon icon="search" size="lg" color="secondary" />}
+                    title="No routes match"
+                    description={`Nothing matches “${search}”. Try a different route name.`}
+                    actions={<Button label="Clear search" variant="secondary" onClick={clearSearch} />}
+                  />
+                ) : (
+                  <Table data={routes} columns={columns} idKey="id" hasHover plugins={{ rowLink }} />
+                )}
+              </VStack>
+              )}
+            </VStack>
           </LayoutContent>
         }
       />
@@ -135,5 +198,13 @@ export function RoutesScreen({ project, routes }: { project: Project; routes: Ro
         onAction={remove}
       />
     </>
+  )
+}
+
+function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" {...props}>
+      <path d="M8 2v8M4.5 6.5 8 10l3.5-3.5M3 13h10" />
+    </svg>
   )
 }

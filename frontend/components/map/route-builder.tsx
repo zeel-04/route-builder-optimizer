@@ -18,6 +18,8 @@ import { Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useToast } from '@astryxdesign/core/Toast'
 import { deleteRouteAction, saveRouteAction } from '@/lib/features/routes/api'
+import { downloadCSV, stopsToCSV } from '@/lib/features/routes/csv'
+import { optimizeStops, routeKm } from '@/lib/features/routes/optimize'
 import type { RouteDetail, RouteDraft, SaveRouteResult } from '@/lib/features/routes/types'
 
 type Props = {
@@ -93,6 +95,23 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
     onChange({ ...draft, stops })
   }
 
+  const canOptimize = draft.stops.filter((s) => s.latitude !== null && s.longitude !== null).length >= 3
+  function optimize() {
+    const before = draft
+    const stops = optimizeStops(draft.stops)
+    const miles = Math.round(routeKm(stops) * 0.621)
+    onChange({ ...draft, stops })
+    toast({
+      body: `Route optimized: ${stops.length} stops, about ${miles} mi`,
+      uniqueID: 'route-optimize',
+      endContent: <Button variant="ghost" size="sm" label="Undo" onClick={() => onChange(before)} />,
+    })
+  }
+
+  function flip() {
+    onChange({ ...draft, stops: [...draft.stops].reverse() })
+  }
+
   return (
     <>
       <Layout
@@ -102,15 +121,19 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
           <LayoutHeader>
             <HStack justify="between" align="center">
               <Heading level={2}>{route ? 'Edit route' : 'New route'}</Heading>
-              {onClose && (
-                <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon="close" />} onClick={onClose} />
-              )}
+              <HStack gap={2} align="center">
+                {route && <Button variant="ghost" size="sm" label="New route" href={hrefFor(null)} />}
+                {onClose && (
+                  <IconButton variant="ghost" size="sm" label="Close" icon={<Icon icon="close" />} onClick={onClose} />
+                )}
+              </HStack>
             </HStack>
           </LayoutHeader>
         }
         content={
           <LayoutContent>
-            <VStack gap={6}>
+            {/* Full height so the tools row can sit at the bottom even with few stops. */}
+            <VStack gap={6} style={{ minHeight: '100%' }}>
               {error && !nameError && <Banner status="error" title={error.message} />}
 
               <FormLayout>
@@ -185,21 +208,48 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
                   ))}
                 </List>
               )}
+              {/* Stays reachable while a long stop list scrolls under it. */}
+              <HStack
+                gap={2}
+                justify="evenly"
+                style={{
+                  marginTop: 'auto',
+                  position: 'sticky',
+                  bottom: 0,
+                  background: 'var(--color-background-surface)',
+                  paddingBlock: 'var(--spacing-1)',
+                }}
+              >
+                <Button
+                  variant="secondary"
+                  label="Optimize"
+                  icon={<Icon icon={ZapIcon} size="sm" />}
+                  isDisabled={!canOptimize}
+                  onClick={optimize}
+                />
+                <Button
+                  variant="ghost"
+                  label="Flip"
+                  icon={<Icon icon={FlipIcon} size="sm" />}
+                  isDisabled={draft.stops.length < 2}
+                  onClick={flip}
+                />
+                <Button
+                  variant="ghost"
+                  label="CSV"
+                  icon={<Icon icon={DownloadIcon} size="sm" />}
+                  isDisabled={draft.stops.length === 0}
+                  onClick={() => downloadCSV(draft.name || 'route', stopsToCSV(draft.stops))}
+                />
+              </HStack>
             </VStack>
           </LayoutContent>
         }
         footer={
           <LayoutFooter>
-            <HStack justify="between" align="center" gap={2}>
-              {route ? (
-                <Button variant="ghost" label="Delete" onClick={() => setDeleteOpen(true)} />
-              ) : (
-                <Text type="supporting">Drag stops to change the order.</Text>
-              )}
+            <HStack justify="end" align="center" gap={2}>
               <HStack gap={2}>
-                {route ? (
-                  <Button variant="ghost" label="New route" href={hrefFor(null)} />
-                ) : (
+                {!route && (
                   <Button
                     variant="ghost"
                     label="Clear"
@@ -235,6 +285,51 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
   )
 }
 
+// Lucide icons (ISC licence), inlined rather than adding lucide-react for three glyphs.
+function strokeProps(props: SVGProps<SVGSVGElement>) {
+  return {
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+    strokeLinecap: 'round',
+    strokeLinejoin: 'round',
+    ...props,
+  } as SVGProps<SVGSVGElement>
+}
+
+/** Lucide "zap". */
+function ZapIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...strokeProps(props)}>
+      <path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z" />
+    </svg>
+  )
+}
+
+/** Lucide "arrow-up-down". */
+function FlipIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...strokeProps(props)}>
+      <path d="m21 16-4 4-4-4" />
+      <path d="M17 20V4" />
+      <path d="m3 8 4-4 4 4" />
+      <path d="M7 4v16" />
+    </svg>
+  )
+}
+
+/** Lucide "download". */
+function DownloadIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg {...strokeProps(props)}>
+      <path d="M12 15V3" />
+      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+      <path d="m7 10 5 5 5-5" />
+    </svg>
+  )
+}
+
 function GripIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 16 16" fill="currentColor" {...props}>
@@ -256,17 +351,9 @@ function ColorField({ value, onChange }: { value: string; onChange: (value: stri
       <input
         id={id}
         type="color"
+        className="color-swatch"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: 'var(--size-element-lg)',
-          height: 'var(--size-element-md)',
-          padding: 0,
-          border: 'var(--border-width) solid var(--color-border-emphasized)',
-          borderRadius: 'var(--radius-element)',
-          background: 'none',
-          cursor: 'pointer',
-        }}
       />
     </Field>
   )

@@ -1,7 +1,10 @@
+import csv
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import IO
 
-import openpyxl
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
@@ -9,10 +12,35 @@ from django.utils.module_loading import import_string
 from loguru import logger
 
 from api.accounts.models import Tenant
+from api.core.exceptions import ApplicationError
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import AddressQuery
 from api.projects.models import Project
+from api.routes.models import Route, RouteStop
+
+CUSTOMER_FIELDS = ["customer_code", "name", "address", "address2", "state", "zipcode"]
+REQUIRED_COLUMNS = ["customer_code", "name", "address", "state", "zipcode"]
+
+
+def _normalize(values: dict) -> dict:
+    values = {field: str(values.get(field) or "").strip() for field in CUSTOMER_FIELDS}
+    values["state"] = values["state"].upper()
+    if values["zipcode"]:
+        values["zipcode"] = values["zipcode"].zfill(5)
+    return values
+
+
+def _row_errors(project: Project, values: dict) -> list[str]:
+    errors = []
+    try:
+        # Model field rules (required, max_length) stay the source of truth.
+        Customer(project=project, **values).clean_fields(exclude=["tenant", "project"])
+    except DjangoValidationError as exc:
+        errors += [f"{field}: {msg}" for field, msgs in exc.message_dict.items() for msg in msgs]
+    if values["state"] and len(values["state"]) != 2:
+        errors.append("state: Must be 2 characters.")
+    return errors
 
 
 @dataclass(slots=True)
@@ -22,38 +50,111 @@ class ImportResult:
     total: int
 
 
-class CustomerImportService:
-    """Upserts a project's customers from Pricecenter's Excel export.
+class CustomerCreateService:
+    @transaction.atomic
+    def execute(self, *, project: Project, **values) -> Customer:
+        customer = Customer(tenant=project.tenant, project=project, **_normalize(values))
+        customer.full_clean()  # also checks unique (project, customer_code) -> 400
+        customer.save()
+        logger.info(
+            "customer created", project_id=str(project.id), customer_code=customer.customer_code
+        )
+        return customer
 
-    The sheet has no city/county columns — those are filled in later by
-    CustomerGeocodeService, from the geocoder's address lookup.
+
+GEOCODE_FIELDS = ["address", "state", "zipcode"]
+
+
+class CustomerUpdateService:
+    @transaction.atomic
+    def execute(self, *, customer: Customer, **values) -> Customer:
+        values = {field: value for field, value in _normalize(values).items() if field in values}
+        # Same rule as the import: a moved customer drops its pin so the
+        # geocoder (which only picks rows with no latitude) runs again.
+        if any(getattr(customer, field) != values[field] for field in GEOCODE_FIELDS if field in values):
+            values.update(latitude=None, longitude=None, location_accuracy="", city="", county="")
+        for field, value in values.items():
+            setattr(customer, field, value)
+        customer.full_clean()  # also checks unique (project, customer_code) -> 400
+        customer.save()
+        logger.info(
+            "customer updated", customer_id=str(customer.id), fields=sorted(values)
+        )
+        return customer
+
+
+class CustomerDeleteService:
+    """Deleting cascades to the customer's RouteStop; the stops after it on
+    that route are shifted down so the sequence stays 1..n with no gap."""
+
+    @transaction.atomic
+    def execute(self, *, customer: Customer) -> None:
+        customer_id = str(customer.id)
+        stop = RouteStop.objects.filter(customer=customer).first()
+        if stop is not None:
+            # Lock the route before the customer row (same order as
+            # RouteUpdateService) so a concurrent stop rewrite can't deadlock.
+            Route.objects.select_for_update().get(pk=stop.route_id)
+        customer.delete()
+        if stop is not None:
+            # One row at a time, ascending: each target sequence was just
+            # freed, so unique (route, sequence) never trips mid-update.
+            later = RouteStop.objects.filter(route_id=stop.route_id, sequence__gt=stop.sequence)
+            for later_stop in later.order_by("sequence"):
+                later_stop.sequence -= 1
+                later_stop.save(update_fields=["sequence"])
+        logger.info("customer deleted", customer_id=customer_id)
+
+
+class CustomerImportService:
+    """Upserts a project's customers from a CSV (header row, columns matched
+    by name). Never deletes. All-or-nothing: any invalid row rejects the file.
+
+    City/county aren't in the file — CustomerGeocodeService fills them later.
     """
 
     @transaction.atomic
-    def execute(self, *, project: Project, xlsx_path: str) -> ImportResult:
-        workbook = openpyxl.load_workbook(xlsx_path, read_only=True)
-        sheet = workbook.worksheets[0]
+    def execute(self, *, project: Project, file: IO[str] | Iterable[str]) -> ImportResult:
+        try:
+            reader = csv.DictReader(file)
+            header = [name.strip() for name in reader.fieldnames or []]
+            missing = [column for column in REQUIRED_COLUMNS if column not in header]
+            if missing:
+                raise ApplicationError(
+                    f"Missing required columns: {', '.join(missing)}.",
+                    extra={"missing_columns": missing},
+                )
+            reader.fieldnames = header
+            rows = [
+                (number, _normalize(row))
+                for number, row in enumerate(reader, start=2)  # row 1 is the header
+                if any((value or "").strip() for value in row.values() if isinstance(value, str))
+            ]
+        except (UnicodeDecodeError, csv.Error) as exc:
+            raise ApplicationError("File is not a valid UTF-8 CSV.") from exc
+
+        errors = {number: e for number, values in rows if (e := _row_errors(project, values))}
+        if errors:
+            raise ApplicationError(
+                f"{len(errors)} row(s) have invalid or missing values.",
+                extra={
+                    "rows": list(errors),
+                    "errors": [{"row": n, "messages": m} for n, m in errors.items()],
+                },
+            )
 
         created = updated = 0
-        for row in sheet.iter_rows(min_row=2, values_only=True):
-            customer_id, name, address, address2, state, zipcode = row[:6]
-            if not customer_id:
-                continue
-            defaults = {
-                "tenant": project.tenant,
-                "name": str(name or ""),
-                "address": str(address or ""),
-                "address2": str(address2) if address2 else "",
-                "state": str(state or "").upper(),
-                "zipcode": str(zipcode).zfill(5) if zipcode else "",
-            }
+        for _, values in rows:
+            code = values.pop("customer_code")
             # A customer whose address changed keeps a stale pin otherwise —
             # the geocoder only looks at rows with no latitude.
-            Customer.objects.filter(project=project, customer_code=str(customer_id)).exclude(
-                address=defaults["address"], state=defaults["state"], zipcode=defaults["zipcode"]
+            Customer.objects.filter(project=project, customer_code=code).exclude(
+                address=values["address"], state=values["state"], zipcode=values["zipcode"]
             ).update(latitude=None, longitude=None, location_accuracy="", city="", county="")
             _, was_created = Customer.objects.update_or_create(
-                project=project, customer_code=str(customer_id), defaults=defaults
+                project=project,
+                customer_code=code,
+                defaults={"tenant": project.tenant, **values},
             )
             created += was_created
             updated += not was_created

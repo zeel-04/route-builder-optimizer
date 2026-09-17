@@ -41,3 +41,18 @@ def customer_filter_options(*, project, state: str = "", county: str = "") -> di
         "counties": list(counties),
         "cities": list(cities),
     }
+
+
+def project_customer_list(*, project, search: str = "") -> QuerySet[Customer]:
+    """Stable order for the paginated project list and the CSV export."""
+    qs = Customer.objects.filter(project=project).select_related("route_stop__route")
+    if search:
+        qs = qs.filter(
+            Q(name__icontains=search)
+            | Q(address__icontains=search)
+            | Q(city__icontains=search)
+            | Q(state__icontains=search)
+            | Q(zipcode__icontains=search)
+            | Q(customer_code__icontains=search)
+        )
+    return qs.order_by("customer_code", "id")
