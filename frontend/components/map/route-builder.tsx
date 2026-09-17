@@ -19,6 +19,7 @@ import { TextInput } from '@astryxdesign/core/TextInput'
 import { useToast } from '@astryxdesign/core/Toast'
 import { deleteRouteAction, saveRouteAction } from '@/lib/features/routes/api'
 import { downloadCSV, stopsToCSV } from '@/lib/features/routes/csv'
+import { MAX_DIRECTIONS_STOPS, directionsURL } from '@/lib/features/routes/maps'
 import { optimizeStops, routeKm } from '@/lib/features/routes/optimize'
 import type { RouteDetail, RouteDraft, SaveRouteResult } from '@/lib/features/routes/types'
 
@@ -108,6 +109,15 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
     })
   }
 
+  async function copyDirections() {
+    await navigator.clipboard.writeText(directionsURL(draft.stops))
+    const extra = draft.stops.length - MAX_DIRECTIONS_STOPS
+    toast({
+      body: extra > 0 ? `Directions link copied, first ${MAX_DIRECTIONS_STOPS} stops only` : 'Directions link copied',
+      uniqueID: 'route-directions',
+    })
+  }
+
   function flip() {
     onChange({ ...draft, stops: [...draft.stops].reverse() })
   }
@@ -145,7 +155,28 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
                   placeholder="Tuesday loop"
                   status={nameError ? { type: 'error', message: nameError } : undefined}
                 />
-                <ColorField value={draft.color} onChange={(color) => onChange({ ...draft, color })} />
+                {/* Exports sit beside the color swatch, which leaves the rest of its row empty. */}
+                <HStack gap={2} align="end" justify="between">
+                  <ColorField value={draft.color} onChange={(color) => onChange({ ...draft, color })} />
+                  <HStack gap={2} align="center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      label="Directions"
+                      icon={<Icon icon="copy" size="sm" />}
+                      isDisabled={draft.stops.length === 0}
+                      onClick={copyDirections}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      label="CSV"
+                      icon={<Icon icon={DownloadIcon} size="sm" />}
+                      isDisabled={draft.stops.length === 0}
+                      onClick={() => downloadCSV(draft.name || 'route', stopsToCSV(draft.stops))}
+                    />
+                  </HStack>
+                </HStack>
               </FormLayout>
 
               {draft.stops.length === 0 ? (
@@ -221,7 +252,7 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
                 }}
               >
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   label="Optimize"
                   icon={<Icon icon={ZapIcon} size="sm" />}
                   isDisabled={!canOptimize}
@@ -233,13 +264,6 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
                   icon={<Icon icon={FlipIcon} size="sm" />}
                   isDisabled={draft.stops.length < 2}
                   onClick={flip}
-                />
-                <Button
-                  variant="ghost"
-                  label="CSV"
-                  icon={<Icon icon={DownloadIcon} size="sm" />}
-                  isDisabled={draft.stops.length === 0}
-                  onClick={() => downloadCSV(draft.name || 'route', stopsToCSV(draft.stops))}
                 />
               </HStack>
             </VStack>

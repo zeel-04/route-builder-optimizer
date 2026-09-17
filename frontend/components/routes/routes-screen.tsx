@@ -20,7 +20,8 @@ import { useToast } from '@astryxdesign/core/Toast'
 import { RouteColorDot } from '@/components/route-color-dot'
 import { useUrlSearch } from '@/components/use-url-search'
 import type { Project } from '@/lib/features/projects/types'
-import { deleteRouteAction } from '@/lib/features/routes/api'
+import { deleteRouteAction, getRoute } from '@/lib/features/routes/api'
+import { MAX_DIRECTIONS_STOPS, directionsURL } from '@/lib/features/routes/maps'
 import type { Route } from '@/lib/features/routes/types'
 
 export type ProjectTab = 'routes' | 'customers'
@@ -65,6 +66,18 @@ export function RoutesScreen({ project, routes, search, hasRoutes, tab, children
     }),
   }
 
+  // ponytail: the list rows carry no stops, so the link is built after a fetch.
+  // Safari can reject a clipboard write that late; move to a link column if that bites.
+  async function copyDirections(route: Route) {
+    const { stops } = await getRoute(route.id)
+    await navigator.clipboard.writeText(directionsURL(stops.map((stop) => stop.customer)))
+    const extra = stops.length - MAX_DIRECTIONS_STOPS
+    toast({
+      body: extra > 0 ? `Directions link copied, first ${MAX_DIRECTIONS_STOPS} stops only` : 'Directions link copied',
+      uniqueID: 'route-directions',
+    })
+  }
+
   function remove() {
     if (!deleting) return
     startDelete(async () => {
@@ -100,10 +113,18 @@ export function RoutesScreen({ project, routes, search, hasRoutes, tab, children
     {
       key: 'id',
       header: '',
-      width: pixel(130),
+      width: pixel(290),
       align: 'end',
       renderCell: (route) => (
         <HStack gap={1} align="center" justify="end">
+          <Button
+            variant="ghost"
+            size="sm"
+            label="Directions"
+            icon={<Icon icon="copy" size="sm" />}
+            isDisabled={route.stop_count === 0}
+            onClick={() => copyDirections(route)}
+          />
           {/* A plain <a>, not the app's Next Link: the export route answers with a file download. */}
           <Button
             variant="ghost"
