@@ -83,9 +83,25 @@ docker compose logs -f caddy
 
 ## Frontend
 
-Amplify app `route-builder-optimizer` (WEB_COMPUTE) builds `main` with the root `amplify.yml`
-(`appRoot: frontend`, Node 22, pnpm 11.9.0). Environment variables are set on the Amplify app:
-`API_URL`, `APP_URL`, `SSO_ENABLED`, `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`.
+Amplify app `route-builder-optimizer` (`d3iiloem2db6zk`, us-east-1, WEB_COMPUTE) builds `main` with the
+root `amplify.yml` (`appRoot: frontend`, Node 22, pnpm 11.9.0). Environment variables are set on the
+Amplify app: `API_URL`, `APP_URL`, `SSO_ENABLED`, `OIDC_DISCOVERY_URL`, `OIDC_CLIENT_ID`,
+`OIDC_CLIENT_SECRET`.
+
+### The frontend builds from a mirror
+
+Amplify needs webhook access to the repository it builds, which takes admin rights on it. It is therefore
+connected to a private mirror, `SJ-Enterprise-USA/route-builder-optimizer`, not to this repository. The
+mirror is **not synced automatically**: a push to `main` here deploys the backend but not the frontend.
+To release the frontend, push `main` to the mirror (Amplify builds on that push):
+
+```
+git fetch origin main
+git push https://github.com/SJ-Enterprise-USA/route-builder-optimizer.git origin/main:refs/heads/main
+```
+
+Never commit to the mirror directly. Once Amplify can be connected to this repository with an admin's
+token, reconnect it here and delete the mirror.
 
 Authentik must have these registered for the application:
 
