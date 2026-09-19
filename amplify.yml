@@ -1,0 +1,29 @@
+version: 1
+applications:
+  - frontend:
+      phases:
+        preBuild:
+          commands:
+            - nvm install 22
+            - nvm use 22
+            - corepack enable
+            - corepack prepare pnpm@11.9.0 --activate
+            - pnpm install --frozen-lockfile
+        build:
+          commands:
+            # Amplify console env vars reach the build shell but not the SSR
+            # runtime; writing them to .env.production covers both. All are
+            # server-side only. lib/features/auth/oidc.ts reads the OIDC ones
+            # at module scope, so they must be present at build time too.
+            - env | grep -E '^(API_URL|APP_URL|SSO_ENABLED|OIDC_DISCOVERY_URL|OIDC_CLIENT_ID|OIDC_CLIENT_SECRET)=' >> .env.production
+            - pnpm run build
+      artifacts:
+        baseDirectory: .next
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - .next/cache/**/*
+          - node_modules/**/*
+          - ~/.local/share/pnpm/store/**/*
+    appRoot: frontend
