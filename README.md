@@ -39,4 +39,6 @@ Frontend — a standard Next.js server, with `API_URL` pointing at the backend:
 cd frontend && pnpm install && pnpm build && pnpm start
 ```
 
+The live deployment (EC2 + Caddy for the backend, Amplify for the frontend, deployed from `main`) is documented in [deploy/README.md](deploy/README.md).
+
 Put TLS and a domain in front of both. Single sign-on is off unless `SSO_ENABLED=true` is set on both sides (see either `.env.example`).

@@ -1,0 +1,9 @@
+api.route-builder.sjenterpriseusa.com {
+	encode gzip
+
+	request_body {
+		max_size 20MB
+	}
+
+	reverse_proxy backend:8000
+}

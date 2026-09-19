@@ -1,0 +1,121 @@
+name: Deploy backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "deploy/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: deploy-backend
+  cancel-in-progress: false
+
+# Images go to the shared Docker Hub repo, one tag namespace per app. The sha
+# tag is what gets deployed (and rolled back to); the -prod tag just tracks it.
+env:
+  IMAGE_REPO: sjenterprise/global
+  IMAGE_TAG_PREFIX: route-builder
+  API_HOST: api.route-builder.sjenterpriseusa.com
+
+jobs:
+  build-and-push:
+    name: Build and push image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG_PREFIX }}-${{ github.sha }}
+            ${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG_PREFIX }}-prod
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to EC2
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Copy deploy directory to EC2
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          source: "deploy/"
+          target: "~/app/"
+          strip_components: 0
+
+      - name: Write .env and restart stack
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            set -eo pipefail
+            cd ~/app/deploy
+
+            umask 077
+            cat > .env <<'ENVEOF'
+            IMAGE=${{ env.IMAGE_REPO }}:${{ env.IMAGE_TAG_PREFIX }}-${{ github.sha }}
+
+            DJANGO_SECRET_KEY=${{ secrets.DJANGO_SECRET_KEY }}
+            DJANGO_DEBUG=false
+            DJANGO_ALLOWED_HOSTS=${{ secrets.DJANGO_ALLOWED_HOSTS }}
+            DJANGO_CSRF_TRUSTED_ORIGINS=${{ secrets.DJANGO_CSRF_TRUSTED_ORIGINS }}
+
+            DB_HOST=${{ secrets.DB_HOST }}
+            DB_PORT=${{ secrets.DB_PORT }}
+            DB_NAME=${{ secrets.DB_NAME }}
+            DB_USER=${{ secrets.DB_USER }}
+            DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+
+            NOMINATIM_URL=${{ secrets.NOMINATIM_URL }}
+            NOMINATIM_USER_AGENT=${{ secrets.NOMINATIM_USER_AGENT }}
+            GEOCODER_CLASS=${{ secrets.GEOCODER_CLASS }}
+
+            # Must match the frontend's SSO_ENABLED / OIDC_* in Amplify;
+            # OIDC_CLIENT_ID is the ID token's audience.
+            SSO_ENABLED=${{ secrets.SSO_ENABLED }}
+            OIDC_DISCOVERY_URL=${{ secrets.OIDC_DISCOVERY_URL }}
+            OIDC_CLIENT_ID=${{ secrets.OIDC_CLIENT_ID }}
+            ENVEOF
+
+            echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin
+
+            docker compose pull
+            docker compose up -d --remove-orphans
+            docker image prune -f
+
+      - name: Wait for the API to come up healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS "https://${API_HOST}/healthz/" >/dev/null; then
+              echo "healthy"; exit 0
+            fi
+            sleep 5
+          done
+          echo "API did not become healthy" >&2
+          exit 1

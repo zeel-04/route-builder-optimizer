@@ -3,3 +3,5 @@
 .claude/settings.local.json
 legacy-context/
 .playwright-mcp/
+graphify-out/
+deploy/.secrets.production
