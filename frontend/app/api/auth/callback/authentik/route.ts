@@ -7,8 +7,9 @@ import { loginResponseSchema, tokenResponseSchema } from '@/lib/features/auth/sc
 import type { SsoErrorCode } from '@/lib/features/auth/sso-errors'
 
 /** Redirects, clearing the one-shot PKCE cookies whichever way the flow ended. */
-function redirectTo(req: NextRequest, path: string) {
-  const res = NextResponse.redirect(new URL(path, req.url))
+function redirectTo(path: string) {
+  // Not req.url: behind a hosting proxy it is the internal origin (localhost:3000).
+  const res = NextResponse.redirect(new URL(path, process.env.APP_URL))
   // The path must match the one they were set with, or the browser keeps them.
   for (const name of [STATE_COOKIE, VERIFIER_COOKIE]) {
     res.cookies.delete({ name, path: OIDC_COOKIE_OPTIONS.path })
@@ -16,8 +17,8 @@ function redirectTo(req: NextRequest, path: string) {
   return res
 }
 
-function toLogin(req: NextRequest, code: SsoErrorCode) {
-  return redirectTo(req, `/login?error=${code}`)
+function toLogin(code: SsoErrorCode) {
+  return redirectTo(`/login?error=${code}`)
 }
 
 export async function GET(req: NextRequest) {
@@ -27,11 +28,11 @@ export async function GET(req: NextRequest) {
   const verifier = req.cookies.get(VERIFIER_COOKIE)?.value
   const params = req.nextUrl.searchParams
 
-  if (params.get('error')) return toLogin(req, 'failed')
+  if (params.get('error')) return toLogin('failed')
 
   const code = params.get('code')
   if (!code || !verifier || !state || params.get('state') !== state) {
-    return toLogin(req, 'expired')
+    return toLogin('expired')
   }
 
   const { token_endpoint } = await oidcConfig()
@@ -47,12 +48,12 @@ export async function GET(req: NextRequest) {
       code_verifier: verifier,
     }),
   })
-  if (!res.ok) return toLogin(req, 'failed')
+  if (!res.ok) return toLogin('failed')
 
   // A 200 that isn't the token payload (wrong scopes, an HTML error page) must
   // still land the user back on /login, not on a 500.
   const parsed = tokenResponseSchema.safeParse(await res.json().catch(() => null))
-  if (!parsed.success) return toLogin(req, 'failed')
+  if (!parsed.success) return toLogin('failed')
 
   let token: string
   try {
@@ -62,11 +63,11 @@ export async function GET(req: NextRequest) {
     }))
   } catch (err) {
     // The backend rejects unknown, inactive, and tenant-less users by design.
-    if (err instanceof ApiError) return toLogin(req, 'not_provisioned')
+    if (err instanceof ApiError) return toLogin('not_provisioned')
     throw err
   }
 
-  const done = redirectTo(req, '/projects')
+  const done = redirectTo('/projects')
   done.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS)
   return done
 }
