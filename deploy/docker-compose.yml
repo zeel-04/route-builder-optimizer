@@ -6,7 +6,8 @@ services:
       - "8000"
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/healthz/"]
+      # Django rejects a Host that isn't in DJANGO_ALLOWED_HOSTS, so send the first one.
+      test: ["CMD-SHELL", "curl -fsS -H \"Host: $${DJANGO_ALLOWED_HOSTS%%,*}\" http://127.0.0.1:8000/healthz/"]
       interval: 30s
       timeout: 5s
       retries: 3
