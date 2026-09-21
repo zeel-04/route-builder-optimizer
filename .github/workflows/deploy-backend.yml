@@ -21,8 +21,55 @@ env:
   API_HOST: api.route-builder.sjenterpriseusa.com
 
 jobs:
+  # Nothing is built or deployed unless the test suite passes. The tests need
+  # no secrets and no network: a throwaway Postgres, and the geocoders are faked
+  # (the real-API checks are `pytest -m live`, run by hand).
+  test:
+    name: Run backend tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-pass
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DB_HOST: localhost
+      DB_PORT: "5432"
+      DB_NAME: route_builder
+      DB_USER: postgres
+      DB_PASSWORD: ci-pass
+      DJANGO_SECRET_KEY: ci-not-a-secret
+      DJANGO_DEBUG: "false"
+      SSO_ENABLED: "false"
+      NOMINATIM_URL: https://nominatim.openstreetmap.org
+      NOMINATIM_USER_AGENT: route-builder-ci
+      GEOCODER_CLASS: api.customers.geocoders.NominatimGeocoder
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run tests
+        run: uv run pytest -q
+
   build-and-push:
     name: Build and push image
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
