@@ -12,3 +12,7 @@ class ProjectOutputSerializer(serializers.Serializer):
 
 class ProjectCreateInputSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255)
+
+
+class ProjectListFilterSerializer(serializers.Serializer):
+    search = serializers.CharField(required=False, allow_blank=True, default="")

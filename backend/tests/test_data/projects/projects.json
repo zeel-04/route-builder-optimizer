@@ -1,14 +1,14 @@
 [
   {
     "id": "PROJ-LIST-001",
-    "description": "List own tenant's projects, ordered by name",
+    "description": "List own tenant's projects, most recently updated first",
     "method": "GET",
     "endpoint": "/api/projects/",
     "headers": {"Authorization": "Bearer {token_a}"},
     "payload": null,
     "query_params": {},
     "expected_status": 200,
-    "expected_body": {"__count__": 2, "name": "Project A"}
+    "expected_body": {"count": 2, "next": null, "results": {"__count__": 2, "name": "Project A2"}}
   },
   {
     "id": "PROJ-LIST-002",
@@ -30,7 +30,51 @@
     "payload": null,
     "query_params": {},
     "expected_status": 200,
-    "expected_body": {"__count__": 1, "name": "Project B"}
+    "expected_body": {"results": {"__count__": 1, "name": "Project B"}}
+  },
+  {
+    "id": "PROJ-LIST-PAGE-001",
+    "description": "First page links to the next",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"page_size": "1"},
+    "expected_status": 200,
+    "expected_body": {"count": 2, "next": "http://testserver/api/projects/?page=2&page_size=1", "results": {"__count__": 1, "name": "Project A2"}}
+  },
+  {
+    "id": "PROJ-LIST-PAGE-002",
+    "description": "A page past the end is a 404",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"page": "5"},
+    "expected_status": 404,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-LIST-SEARCH-001",
+    "description": "Search matches part of the name, ignoring case",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"search": "a2"},
+    "expected_status": 200,
+    "expected_body": {"count": 1, "results": {"__count__": 1, "name": "Project A2"}}
+  },
+  {
+    "id": "PROJ-LIST-SEARCH-002",
+    "description": "Search never reaches another tenant's projects",
+    "method": "GET",
+    "endpoint": "/api/projects/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"search": "Project B"},
+    "expected_status": 200,
+    "expected_body": {"count": 0, "results": []}
   },
   {
     "id": "PROJ-DETAIL-001",
@@ -130,5 +174,104 @@
     "query_params": {},
     "expected_status": 201,
     "expected_body": {"name": "Project A", "customer_count": 0}
+  },
+  {
+    "id": "PROJ-UPDATE-001",
+    "description": "Rename own project; its counts are kept",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Renamed"},
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": {"name": "Renamed", "customer_count": 3, "route_count": 1}
+  },
+  {
+    "id": "PROJ-UPDATE-002",
+    "description": "Rename a project without a token",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {},
+    "payload": {"name": "Renamed"},
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-UPDATE-003",
+    "description": "Tenant A cannot rename tenant B's project",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_b_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Renamed"},
+    "query_params": {},
+    "expected_status": 404,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-UPDATE-004",
+    "description": "Rename to a name another project in the tenant already uses",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Project A2"},
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "PROJ-UPDATE-005",
+    "description": "Saving a project under its own name is fine",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {"name": "Project A"},
+    "query_params": {},
+    "expected_status": 200,
+    "expected_body": {"name": "Project A"}
+  },
+  {
+    "id": "PROJ-UPDATE-006",
+    "description": "Rename with no name",
+    "method": "PATCH",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": {},
+    "query_params": {},
+    "expected_status": 400,
+    "expected_body": {"message": "Validation error"}
+  },
+  {
+    "id": "PROJ-DELETE-001",
+    "description": "Delete own project along with its customers and routes",
+    "method": "DELETE",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 204,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-DELETE-002",
+    "description": "Delete a project without a token",
+    "method": "DELETE",
+    "endpoint": "/api/projects/{tenant_a_project_id}/",
+    "headers": {},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 401,
+    "expected_body": null
+  },
+  {
+    "id": "PROJ-DELETE-003",
+    "description": "Tenant A cannot delete tenant B's project",
+    "method": "DELETE",
+    "endpoint": "/api/projects/{tenant_b_project_id}/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {},
+    "expected_status": 404,
+    "expected_body": null
   }
 ]

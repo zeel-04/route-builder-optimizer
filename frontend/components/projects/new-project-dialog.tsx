@@ -7,18 +7,27 @@ import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog'
 import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { TextInput } from '@astryxdesign/core/TextInput'
-import { createProjectAction } from '@/lib/features/projects/api'
+import { createProjectAction, renameProjectAction } from '@/lib/features/projects/api'
+import type { CreateProjectState, Project } from '@/lib/features/projects/types'
 
-function NewProjectForm({ onClose }: { onClose: () => void }) {
-  // On success the action redirects to the new project, so only failures come back here.
-  const [state, formAction, pending] = useActionState(createProjectAction, null)
-  const [name, setName] = useState('')
+type FormProps = {
+  title: string
+  submitLabel: string
+  pendingLabel: string
+  initialName?: string
+  action: (prev: CreateProjectState, formData: FormData) => Promise<CreateProjectState>
+  onClose: () => void
+}
+
+function ProjectForm({ title, submitLabel, pendingLabel, initialName = '', action, onClose }: FormProps) {
+  const [state, formAction, pending] = useActionState(action, null)
+  const [name, setName] = useState(initialName)
   const error = state?.errors?.name?.[0]
 
   return (
     <form action={formAction}>
       <Layout
-        header={<DialogHeader title="New project" onOpenChange={onClose} />}
+        header={<DialogHeader title={title} onOpenChange={onClose} />}
         content={
           <LayoutContent>
             <VStack gap={4}>
@@ -41,7 +50,7 @@ function NewProjectForm({ onClose }: { onClose: () => void }) {
               <Button
                 type="submit"
                 variant="primary"
-                label={pending ? 'Creating…' : 'Create project'}
+                label={pending ? pendingLabel : submitLabel}
                 isLoading={pending}
               />
             </HStack>
@@ -59,8 +68,39 @@ export function NewProjectButton() {
       <Button variant="primary" label="New project" onClick={() => setOpen(true)} />
       <Dialog isOpen={isOpen} onOpenChange={setOpen} purpose="form" width={480}>
         {/* Mounted only while open, so a reopened dialog starts clean. */}
-        {isOpen && <NewProjectForm onClose={() => setOpen(false)} />}
+        {isOpen && (
+          // On success the action redirects to the new project, so only failures come back here.
+          <ProjectForm
+            title="New project"
+            submitLabel="Create project"
+            pendingLabel="Creating…"
+            action={createProjectAction}
+            onClose={() => setOpen(false)}
+          />
+        )}
       </Dialog>
     </>
+  )
+}
+
+/** Open while `project` is set. */
+export function RenameProjectDialog({ project, onClose }: { project: Project | null; onClose: () => void }) {
+  return (
+    <Dialog isOpen={project !== null} onOpenChange={(open) => !open && onClose()} purpose="form" width={480}>
+      {project && (
+        <ProjectForm
+          title="Rename project"
+          submitLabel="Save"
+          pendingLabel="Saving…"
+          initialName={project.name}
+          action={async (prev, formData) => {
+            const state = await renameProjectAction(project.id, prev, formData)
+            if (!state) onClose()
+            return state
+          }}
+          onClose={onClose}
+        />
+      )}
+    </Dialog>
   )
 }
