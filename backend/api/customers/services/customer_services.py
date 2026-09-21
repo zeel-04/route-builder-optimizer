@@ -1,12 +1,11 @@
 import csv
-import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import IO
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from django.utils.module_loading import import_string
@@ -17,6 +16,7 @@ from api.core.exceptions import ApplicationError
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import AddressQuery
+from api.customers.tasks import geocode_tenant
 from api.projects.models import Project
 from api.routes.models import Route, RouteStop
 
@@ -51,33 +51,16 @@ class ImportResult:
     total: int
 
 
-_geocode_lock = threading.Lock()
-
-
 def _schedule_geocode(tenant: Tenant) -> None:
-    """Nothing else fills in coordinates, so customers created through the API
-    have no map pin until this runs. Nominatim's 1 req/sec cap makes it far too
-    slow for the request itself, so it runs after the rows are committed.
+    """Nothing else fills in coordinates, so a customer written through the API
+    has no map pin until this runs. Nominatim's 1 req/sec cap makes it far too
+    slow for the request itself, so the worker does it (see tasks.py).
 
-    ponytail: in-process thread, so a restart drops the run in flight and
-    every web instance geocodes its own uploads. Both are self-correcting —
-    the service only ever looks at rows still missing a latitude — and the
-    lock keeps this process to one Nominatim call at a time. Move it to a
-    task queue when a dropped run costs more than the next upload.
+    Call it inside the transaction that wrote the customer: the task is a row
+    in the same database, so it commits with the customer or not at all, and
+    the worker can't see it any earlier.
     """
-
-    def run() -> None:
-        with _geocode_lock:
-            try:
-                CustomerGeocodeService().execute(tenant=tenant)
-            except Exception:
-                logger.exception("background geocode failed", tenant_id=str(tenant.id))
-            finally:
-                # No request ends this thread, so nothing else would hand the
-                # pooler its connection back (CONN_MAX_AGE is 0).
-                connection.close()
-
-    threading.Thread(target=run, name="geocode", daemon=False).start()
+    geocode_tenant.enqueue(tenant_id=str(tenant.id))
 
 
 class CustomerCreateService:
@@ -89,7 +72,7 @@ class CustomerCreateService:
         logger.info(
             "customer created", project_id=str(project.id), customer_code=customer.customer_code
         )
-        transaction.on_commit(lambda: _schedule_geocode(project.tenant))
+        _schedule_geocode(project.tenant)
         return customer
 
 
@@ -103,7 +86,10 @@ class CustomerUpdateService:
         # Same rule as the import: a moved customer drops its pin so the
         # geocoder (which only picks rows with no latitude) runs again.
         if any(getattr(customer, field) != values[field] for field in GEOCODE_FIELDS if field in values):
-            values.update(latitude=None, longitude=None, location_accuracy="", city="", county="")
+            values.update(
+                latitude=None, longitude=None, location_accuracy="", city="", county="",
+                geocode_attempted_at=None,  # the new address hasn't been tried
+            )
         for field, value in values.items():
             setattr(customer, field, value)
         customer.full_clean()  # also checks unique (project, customer_code) -> 400
@@ -112,7 +98,7 @@ class CustomerUpdateService:
             "customer updated", customer_id=str(customer.id), fields=sorted(values)
         )
         if customer.latitude is None:
-            transaction.on_commit(lambda: _schedule_geocode(customer.tenant))
+            _schedule_geocode(customer.tenant)
         return customer
 
 
@@ -183,7 +169,10 @@ class CustomerImportService:
             # the geocoder only looks at rows with no latitude.
             Customer.objects.filter(project=project, customer_code=code).exclude(
                 address=values["address"], state=values["state"], zipcode=values["zipcode"]
-            ).update(latitude=None, longitude=None, location_accuracy="", city="", county="")
+            ).update(
+                latitude=None, longitude=None, location_accuracy="", city="", county="",
+                geocode_attempted_at=None,  # the new address hasn't been tried
+            )
             _, was_created = Customer.objects.update_or_create(
                 project=project,
                 customer_code=code,
@@ -195,7 +184,7 @@ class CustomerImportService:
         logger.info(
             "customers imported", project_id=str(project.id), created=created, updated=updated
         )
-        transaction.on_commit(lambda: _schedule_geocode(project.tenant))
+        _schedule_geocode(project.tenant)
         return ImportResult(created=created, updated=updated, total=created + updated)
 
 
@@ -228,42 +217,39 @@ class CustomerGeocodeService:
 
         street = zip_ = failed = 0
         for customer in queryset:
-            customer.geocode_attempted_at = timezone.now()
             result = self._geocoder.geocode(
                 AddressQuery(street=customer.address, zipcode=customer.zipcode, state=customer.state)
             )
+            fields = {"geocode_attempted_at": timezone.now()}
             if result is None:
                 failed += 1
-                customer.save(update_fields=["geocode_attempted_at"])
                 logger.warning(
                     "geocode failed",
                     customer_code=customer.customer_code,
                     tenant_id=str(tenant.id),
                 )
-                continue
+            else:
+                fields.update(
+                    latitude=result.latitude,
+                    longitude=result.longitude,
+                    location_accuracy=result.accuracy,
+                    city=result.city,
+                    county=result.county,
+                )
+                street += result.accuracy == "street"
+                zip_ += result.accuracy == "zip"
+                logger.info(
+                    "customer geocoded",
+                    customer_code=customer.customer_code,
+                    accuracy=result.accuracy,
+                )
 
-            customer.latitude = result.latitude
-            customer.longitude = result.longitude
-            customer.location_accuracy = result.accuracy
-            customer.city = result.city
-            customer.county = result.county
-            customer.save(
-                update_fields=[
-                    "latitude",
-                    "longitude",
-                    "location_accuracy",
-                    "city",
-                    "county",
-                    "geocode_attempted_at",
-                ]
-            )
-
-            street += result.accuracy == "street"
-            zip_ += result.accuracy == "zip"
-            logger.info(
-                "customer geocoded",
-                customer_code=customer.customer_code,
-                accuracy=result.accuracy,
+            # A sweep takes minutes, so a customer can be deleted while it
+            # runs. An UPDATE just matches no rows; customer.save(update_fields)
+            # raises there and abandons every row still left in the run.
+            # updated_at is auto_now, which .update() doesn't apply itself.
+            Customer.objects.filter(pk=customer.pk).update(
+                updated_at=timezone.now(), **fields
             )
 
         return GeocodeRunResult(street=street, zip=zip_, failed=failed)

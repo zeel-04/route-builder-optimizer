@@ -21,6 +21,8 @@ export const customerSchema = z.object({
   longitude: z.number().nullable(),
   // "" until the customer has been geocoded
   location_accuracy: z.enum([...Object.values(LocationAccuracy), '']),
+  // no pin yet because the lookup hasn't run; false once it was tried, found or not
+  is_geocode_pending: z.boolean(),
   route: routeRefSchema.nullable(),
 })
 

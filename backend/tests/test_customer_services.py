@@ -1,14 +1,19 @@
 import io
 
+from django.core.management import call_command
+from django_tasks import default_task_backend
+
 from api.accounts.models import Tenant
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import GeocodeResult
-from api.customers.services import customer_services
+from api.customers.serializers.customer_serializers import CustomerListOutputSerializer
+from api.customers import tasks
 from api.customers.services.customer_services import (
     CustomerDeleteService,
     CustomerGeocodeService,
     CustomerImportService,
+    CustomerUpdateService,
 )
 from api.projects.models import Project
 from api.routes.models import Route, RouteStop
@@ -95,16 +100,143 @@ def test_delete_closes_route_sequence_gap(db):
     ]
 
 
-def test_import_schedules_geocode(db, django_capture_on_commit_callbacks, monkeypatch):
-    """Uploaded rows have no coordinates, so the import has to kick the
-    geocoder off itself — otherwise the map shows no pins."""
+def _queued_tenant_ids():
+    return [result.kwargs["tenant_id"] for result in default_task_backend.results]
+
+
+def test_import_queues_a_geocode_task(db):
+    """Uploaded rows have no coordinates, so the import has to queue the
+    geocoder itself — otherwise the map shows no pins."""
     tenant = Tenant.objects.create(name="Sched T")
     project = Project.objects.create(tenant=tenant, name="Sched P")
-    scheduled = []
-    monkeypatch.setattr(customer_services, "_schedule_geocode", scheduled.append)
     csv_file = io.StringIO("customer_code,name,address,state,zipcode\n1,A,1 Ok St,NY,12201\n")
 
-    with django_capture_on_commit_callbacks(execute=True):
-        CustomerImportService().execute(project=project, file=csv_file)
+    CustomerImportService().execute(project=project, file=csv_file)
 
-    assert scheduled == [tenant]
+    assert _queued_tenant_ids() == [str(tenant.id)]
+
+
+def test_rejected_import_queues_nothing(db):
+    tenant = Tenant.objects.create(name="Reject T")
+    project = Project.objects.create(tenant=tenant, name="Reject P")
+    csv_file = io.StringIO("customer_code,name,address,state,zipcode\n1,A,1 Ok St,NEWYORK,12201\n")
+
+    try:
+        CustomerImportService().execute(project=project, file=csv_file)
+    except Exception:
+        pass
+
+    assert _queued_tenant_ids() == []
+
+
+def test_update_queues_a_geocode_only_when_the_pin_is_cleared(db):
+    tenant = Tenant.objects.create(name="Upd T")
+    project = Project.objects.create(tenant=tenant, name="Upd P")
+    customer = Customer.objects.create(
+        tenant=tenant, project=project, customer_code="1", name="A", address="1 Ok St",
+        state="NY", zipcode="12201", latitude=1, longitude=2, location_accuracy="street",
+    )
+
+    CustomerUpdateService().execute(customer=customer, name="Renamed")
+    assert _queued_tenant_ids() == []  # still pinned, nothing to look up
+
+    CustomerUpdateService().execute(customer=customer, address="2 Ok St")
+    assert _queued_tenant_ids() == [str(tenant.id)]
+
+
+def test_geocode_task_works_in_batches_until_nothing_is_untried(db, settings, monkeypatch):
+    """One batch per task, and the chain stops on its own: an address that
+    isn't found stays unpinned forever and must not keep it going."""
+    settings.GEOCODER_CLASS = "tests.test_customer_services.FakeGeocoder"
+    monkeypatch.setattr(tasks, "GEOCODE_BATCH_SIZE", 2)
+    tenant = Tenant.objects.create(name="Batch T")
+    project = Project.objects.create(tenant=tenant, name="Batch P")
+    for code, address in [("1", "1 Ok St"), ("2", "2 Bad St"), ("3", "3 Ok St")]:
+        Customer.objects.create(
+            tenant=tenant, project=project, customer_code=code, name=code,
+            address=address, state="NY", zipcode="12201",
+        )
+
+    first = tasks.geocode_tenant.call(tenant_id=str(tenant.id))
+    assert first == {"street": 1, "zip": 0, "failed": 1}
+    assert _queued_tenant_ids() == [str(tenant.id)]  # customer 3 is still untried
+
+    default_task_backend.clear()
+    second = tasks.geocode_tenant.call(tenant_id=str(tenant.id))
+    # Customer 3, plus one more try at the address that wasn't found.
+    assert second == {"street": 1, "zip": 0, "failed": 1}
+    assert _queued_tenant_ids() == []  # only the not-found address is left: stop
+    assert Customer.objects.filter(tenant=tenant, latitude__isnull=False).count() == 2
+
+
+def test_geocode_task_for_a_deleted_tenant_is_a_no_op(db):
+    assert tasks.geocode_tenant.call(tenant_id="00000000-0000-0000-0000-000000000000") is None
+    assert _queued_tenant_ids() == []
+
+
+def test_worker_startup_requeues_only_tenants_with_untried_customers(db):
+    """A task killed part-way is never retried, so the worker queues one on
+    start for whatever was left behind."""
+    stranded = Tenant.objects.create(name="Stranded T")
+    done = Tenant.objects.create(name="Done T")
+    for tenant, extra in [
+        (stranded, {}),
+        (stranded, {}),  # two customers, still one task
+        (done, {"latitude": 1, "longitude": 2}),
+    ]:
+        project, _ = Project.objects.get_or_create(tenant=tenant, name="P")
+        Customer.objects.create(
+            tenant=tenant, project=project, customer_code=str(Customer.objects.count()),
+            name="C", address="1 Ok St", state="NY", zipcode="12201", **extra,
+        )
+
+    call_command("enqueue_pending_geocodes")
+
+    queued = _queued_tenant_ids()  # the seeded tenants have untried customers too
+    assert queued.count(str(stranded.id)) == 1
+    assert str(done.id) not in queued
+
+
+def test_geocode_survives_a_customer_deleted_mid_run(db):
+    """The sweep runs for minutes, so a row can vanish under it. Losing one
+    must not abandon the customers still queued behind it."""
+    tenant = Tenant.objects.create(name="Race T")
+    project = Project.objects.create(tenant=tenant, name="Race P")
+    for code, address in [("1", "1 Ok St"), ("2", "2 Ok St")]:
+        Customer.objects.create(
+            tenant=tenant, project=project, customer_code=code, name=code,
+            address=address, state="NY", zipcode="12201",
+        )
+
+    class DeletingGeocoder(FakeGeocoder):
+        """Deletes customer 2 while customer 1 is being looked up."""
+
+        def geocode(self, query):
+            if query.street == "1 Ok St":
+                Customer.objects.filter(project=project, customer_code="2").delete()
+            return super().geocode(query)
+
+    result = CustomerGeocodeService(geocoder=DeletingGeocoder()).execute(tenant=tenant)
+
+    assert result.street == 2  # the deleted row still "succeeds", it just saves nothing
+    assert Customer.objects.get(project=project, customer_code="1").latitude is not None
+
+
+def test_pending_flag_separates_untried_from_not_found(db):
+    """The map's loader follows this flag: a lookup that ran and found nothing
+    must not keep it spinning, and a new address must start it again."""
+    tenant = Tenant.objects.create(name="Pending T")
+    project = Project.objects.create(tenant=tenant, name="Pending P")
+    customer = Customer.objects.create(
+        tenant=tenant, project=project, customer_code="1", name="A",
+        address="1 Bad St", state="NY", zipcode="12201",
+    )
+    is_pending = lambda: CustomerListOutputSerializer(  # noqa: E731
+        Customer.objects.get(pk=customer.pk)
+    ).data["is_geocode_pending"]
+
+    assert is_pending()  # never tried
+    CustomerGeocodeService(geocoder=FakeGeocoder()).execute(tenant=tenant)
+    assert not is_pending()  # tried, not found
+    CustomerUpdateService().execute(customer=Customer.objects.get(pk=customer.pk), address="2 Bad St")
+    assert is_pending()  # new address, not tried yet
