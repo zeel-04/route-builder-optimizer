@@ -11,6 +11,17 @@
     "expected_body": {"latitude": 40.73, "longitude": -74.17, "label": "12 Main St, Newark, NJ"}
   },
   {
+    "id": "PLACE-SEARCH-005",
+    "description": "Search by ZIP code alone",
+    "method": "GET",
+    "endpoint": "/api/places/search/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"zipcode": "07102"},
+    "expected_status": 200,
+    "expected_body": {"latitude": 40.73, "longitude": -74.17, "label": "12 Main St, Newark, NJ"}
+  },
+  {
     "id": "PLACE-SEARCH-002",
     "description": "Search without a token",
     "method": "GET",

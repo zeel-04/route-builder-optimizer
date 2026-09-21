@@ -23,6 +23,7 @@ const ExploreLeafletMap = dynamic(() => import('./explore-map').then((m) => m.Ex
 // The most specific field searched decides how close to zoom in.
 function zoomFor(query: PlaceQuery) {
   if (query.address) return 16
+  if (query.zipcode) return 13
   if (query.city) return 12
   if (query.county) return 10
   return 7
@@ -104,9 +105,19 @@ function SearchToolbar({ query, isMissing }: { query: PlaceQuery; isMissing: boo
             width={220}
             label="Address"
             isLabelHidden
-            placeholder="Address"
+            placeholder="Street address"
             value={draft.address}
             onChange={set('address')}
+            hasClear
+          />
+          <TextInput
+            size="sm"
+            width={110}
+            label="ZIP code"
+            isLabelHidden
+            placeholder="ZIP code"
+            value={draft.zipcode}
+            onChange={set('zipcode')}
             hasClear
           />
           <Button type="submit" size="sm" variant="primary" label="Search" isLoading={isPending} />

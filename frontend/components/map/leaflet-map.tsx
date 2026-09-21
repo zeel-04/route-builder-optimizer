@@ -12,6 +12,8 @@ import type { RouteDraft } from '@/lib/features/routes/types'
 
 export const DEFAULT_CENTER: LatLngTuple = [40.7, -74.2] // NJ / NY, where the first tenant lives
 export const DEFAULT_ZOOM = 8
+/** Pin fill for search results, on every map. */
+export const SEARCH_PIN_COLOR = '#e11d2f'
 const toLatLng = (c: Pinned): LatLngTuple => [c.latitude, c.longitude]
 
 // Teardrop pin, tip on the coordinate. Cached per look so re-renders reuse the same
@@ -45,6 +47,8 @@ type Props = {
   draft: RouteDraft
   editingRouteId: string | null
   onAddStop: (customer: Customer) => void
+  /** A search is active, so every pin shown is a search result: paint them all red. */
+  isSearching: boolean
   /** Changes when the filters change: refit to the filtered pins. */
   filtersKey: string
   /** Stops of the route that was opened; refit to them when focusNonce changes. */
@@ -57,6 +61,7 @@ export function LeafletMap({
   draft,
   editingRouteId,
   onAddStop,
+  isSearching,
   filtersKey,
   focus,
   focusNonce,
@@ -68,7 +73,13 @@ export function LeafletMap({
     <MapContainer center={DEFAULT_CENTER} zoom={DEFAULT_ZOOM} zoomSnap={0.25} style={{ height: '100%', width: '100%' }}>
       <BaseTiles />
       <FitToPins pinned={pinned} filtersKey={filtersKey} focus={focus} focusNonce={focusNonce} />
-      <Pins pinned={pinned} draft={draft} editingRouteId={editingRouteId} onAddStop={onAddStop} />
+      <Pins
+        pinned={pinned}
+        draft={draft}
+        editingRouteId={editingRouteId}
+        onAddStop={onAddStop}
+        isSearching={isSearching}
+      />
       {draft.stops.length > 1 && (
         <Polyline
           positions={draft.stops.filter(hasPin).map(toLatLng)}
@@ -94,7 +105,8 @@ function Pins({
   draft,
   editingRouteId,
   onAddStop,
-}: Pick<Props, 'draft' | 'editingRouteId' | 'onAddStop'> & { pinned: PinnedCustomer[] }) {
+  isSearching,
+}: Pick<Props, 'draft' | 'editingRouteId' | 'onAddStop' | 'isSearching'> & { pinned: PinnedCustomer[] }) {
   const theme = useTheme()
   const stopIndex = useMemo(() => new Map(draft.stops.map((s, i) => [s.id, i + 1])), [draft.stops])
 
@@ -109,7 +121,8 @@ function Pins({
         key={c.id}
         position={toLatLng(c)}
         icon={pinIcon(
-          stopNumber ? draft.color : otherRoute ? otherRoute.color : neutralPin,
+          // Stops keep their number, so the route order still reads while searching.
+          isSearching ? SEARCH_PIN_COLOR : stopNumber ? draft.color : otherRoute ? otherRoute.color : neutralPin,
           pinStroke,
           stopNumber ? 28 : 20,
           c.location_accuracy === LocationAccuracy.ZIP ? 0.55 : 1,

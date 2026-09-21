@@ -6,11 +6,12 @@ class PlaceSearchFilterSerializer(serializers.Serializer):
     county = serializers.CharField(required=False, allow_blank=True, default="")
     city = serializers.CharField(required=False, allow_blank=True, default="")
     address = serializers.CharField(required=False, allow_blank=True, default="")
+    zipcode = serializers.CharField(required=False, allow_blank=True, default="")
 
     def validate(self, attrs):
         if not any(attrs.values()):
             raise serializers.ValidationError(
-                "Provide at least one of state, county, city, address."
+                "Provide at least one of state, county, city, address, zipcode."
             )
         return attrs
 

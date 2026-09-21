@@ -11,6 +11,28 @@
     "expected_body": {"__count__": 1, "customer_code": "A-FREE-1", "state": "NY"}
   },
   {
+    "id": "CUST-LIST-ZIP-001",
+    "description": "ZIP code filter matches by prefix and combines with the other filters",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "zipcode": "1220", "search": "2 Elm"},
+    "expected_status": 200,
+    "expected_body": {"__count__": 1, "customer_code": "A-FREE-2"}
+  },
+  {
+    "id": "CUST-LIST-ZIP-002",
+    "description": "ZIP code filter never reaches another tenant's customers",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "zipcode": "{cust_b_taken_zip}"},
+    "expected_status": 200,
+    "expected_body": []
+  },
+  {
     "id": "CUST-LIST-002",
     "description": "List customers without a token",
     "method": "GET",
