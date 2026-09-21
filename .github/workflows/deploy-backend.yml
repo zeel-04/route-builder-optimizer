@@ -106,6 +106,12 @@ jobs:
             echo '${{ secrets.DOCKERHUB_TOKEN }}' | docker login -u '${{ secrets.DOCKERHUB_USERNAME }}' --password-stdin
 
             docker compose pull
+            # Migrate with the new image before anything switches to it: new code
+            # never runs against an old schema, and a failed migration stops the
+            # deploy (set -e) with the old containers still serving. The old code
+            # does run against the new schema for a few seconds, so a migration
+            # that breaks it (dropping a column it reads) has to ship in two steps.
+            docker compose run --rm --entrypoint python backend manage.py migrate --noinput
             docker compose up -d --remove-orphans
             docker image prune -f
 

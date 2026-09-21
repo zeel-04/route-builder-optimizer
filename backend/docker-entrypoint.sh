@@ -1,7 +1,8 @@
 #!/bin/sh
 set -e
 
-# Migrations are deliberately not run here; see deploy/README.md.
+# Migrations run in the deploy workflow, before this container is replaced —
+# not here, where every gunicorn restart would race to apply them.
 python manage.py collectstatic --noinput
 
 exec gunicorn config.wsgi:application \

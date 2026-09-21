@@ -24,7 +24,13 @@ class CustomerListOutputSerializer(serializers.Serializer):
         max_digits=9, decimal_places=6, allow_null=True, coerce_to_string=False
     )
     location_accuracy = serializers.CharField()
+    is_geocode_pending = serializers.SerializerMethodField()
     route = serializers.SerializerMethodField()
+
+    def get_is_geocode_pending(self, obj):
+        # Not looked up yet. An address that was tried and not found has no
+        # pin either, but nothing is still working on it.
+        return obj.latitude is None and obj.geocode_attempted_at is None
 
     def get_route(self, obj):
         stop = getattr(obj, "route_stop", None)

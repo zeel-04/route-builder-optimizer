@@ -52,6 +52,7 @@ export function MapScreen({ project, customers, options, filters, route }: Props
 
   const stopIds = useMemo(() => new Set(draft.stops.map((s) => s.id)), [draft.stops])
   const unpinned = customers.filter((c) => !hasPin(c)).length
+  const pending = customers.filter((c) => c.is_geocode_pending).length
   const hasFilters = Object.values(filters).some(Boolean)
 
   function addStop(customer: Customer) {
@@ -79,7 +80,8 @@ export function MapScreen({ project, customers, options, filters, route }: Props
             filters={filters}
             options={options}
             total={customers.length}
-            unpinned={unpinned}
+            pending={pending}
+            notFound={unpinned - pending}
           />
         }
         content={

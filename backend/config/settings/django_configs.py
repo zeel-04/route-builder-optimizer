@@ -29,6 +29,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "rest_framework",
     "rest_framework.authtoken",
+    "django_tasks",
+    "django_tasks_db",
     "api.core",
     "api.accounts",
     "api.projects",
@@ -103,3 +105,4 @@ REST_FRAMEWORK = {
 from config.settings.database import *  # noqa
 from config.settings.geocoding import *  # noqa
 from config.settings.sso import *  # noqa
+from config.settings.tasks import *  # noqa

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { LayoutHeader } from '@astryxdesign/core/Layout'
 import { Selector } from '@astryxdesign/core/Selector'
+import { Spinner } from '@astryxdesign/core/Spinner'
 import { HStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
@@ -14,10 +15,13 @@ type Props = {
   filters: CustomerFilters
   options: FilterOptions
   total: number
-  unpinned: number
+  /** Customers whose address hasn't been looked up yet. */
+  pending: number
+  /** Looked up, but the address wasn't found. */
+  notFound: number
 }
 
-export function FilterToolbar({ projectName, filters, options, total, unpinned }: Props) {
+export function FilterToolbar({ projectName, filters, options, total, pending, notFound }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -36,6 +40,14 @@ export function FilterToolbar({ projectName, filters, options, total, unpinned }
     },
     [pathname, router, searchParams],
   )
+
+  // Pins land about one a second while an upload is being looked up: pull them in.
+  const isMapping = pending > 0
+  useEffect(() => {
+    if (!isMapping) return
+    const timer = setInterval(() => router.refresh(), 5000)
+    return () => clearInterval(timer)
+  }, [isMapping, router])
 
   // Debounce typing into the URL.
   useEffect(() => {
@@ -108,10 +120,14 @@ export function FilterToolbar({ projectName, filters, options, total, unpinned }
             isLoading={isPending}
           />
         </HStack>
-        <Text type="supporting">
-          {total} {total === 1 ? 'customer' : 'customers'}
-          {unpinned > 0 ? ` · ${unpinned} without a map pin` : ''}
-        </Text>
+        <HStack gap={2} align="center">
+          {isMapping && <Spinner size="sm" aria-label="Mapping customers" />}
+          <Text type="supporting">
+            {total} {total === 1 ? 'customer' : 'customers'}
+            {isMapping ? ` · Mapping ${pending}…` : ''}
+            {notFound > 0 ? ` · ${notFound} ${notFound === 1 ? 'address' : 'addresses'} not found` : ''}
+          </Text>
+        </HStack>
       </HStack>
     </LayoutHeader>
   )
