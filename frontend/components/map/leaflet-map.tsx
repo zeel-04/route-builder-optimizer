@@ -124,9 +124,10 @@ function Pins({
           // Stops keep their number, so the route order still reads while searching.
           isSearching ? SEARCH_PIN_COLOR : stopNumber ? draft.color : otherRoute ? otherRoute.color : neutralPin,
           pinStroke,
-          stopNumber ? 28 : 20,
+          // Saved routes keep their numbers too, a size down from the route being built.
+          stopNumber ? 28 : otherRoute ? 24 : 20,
           c.location_accuracy === LocationAccuracy.ZIP ? 0.55 : 1,
-          stopNumber ? String(stopNumber) : '',
+          String(stopNumber ?? otherRoute?.sequence ?? ''),
         )}
         eventHandlers={{ click: () => !otherRoute && !stopNumber && onAddStop(c) }}
       >
