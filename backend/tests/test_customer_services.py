@@ -4,6 +4,7 @@ from api.accounts.models import Tenant
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import GeocodeResult
+from api.customers.services import customer_services
 from api.customers.services.customer_services import (
     CustomerDeleteService,
     CustomerGeocodeService,
@@ -92,3 +93,18 @@ def test_delete_closes_route_sequence_gap(db):
     assert list(route.stops.values_list("customer__customer_code", "sequence")) == [
         ("1", 1), ("3", 2), ("4", 3)
     ]
+
+
+def test_import_schedules_geocode(db, django_capture_on_commit_callbacks, monkeypatch):
+    """Uploaded rows have no coordinates, so the import has to kick the
+    geocoder off itself — otherwise the map shows no pins."""
+    tenant = Tenant.objects.create(name="Sched T")
+    project = Project.objects.create(tenant=tenant, name="Sched P")
+    scheduled = []
+    monkeypatch.setattr(customer_services, "_schedule_geocode", scheduled.append)
+    csv_file = io.StringIO("customer_code,name,address,state,zipcode\n1,A,1 Ok St,NY,12201\n")
+
+    with django_capture_on_commit_callbacks(execute=True):
+        CustomerImportService().execute(project=project, file=csv_file)
+
+    assert scheduled == [tenant]
