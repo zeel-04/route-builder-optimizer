@@ -39,7 +39,7 @@ docker compose run --rm --entrypoint python backend manage.py migrate
 Other management commands run the same way, e.g. the long geocoding pass:
 
 ```
-nohup docker compose run --rm --entrypoint python backend manage.py geocode_customers > geocode.log 2>&1 &
+nohup docker compose run --rm --entrypoint python backend manage.py geocode_customers --tenant '<Tenant name>' > geocode.log 2>&1 &
 ```
 
 ### Secrets

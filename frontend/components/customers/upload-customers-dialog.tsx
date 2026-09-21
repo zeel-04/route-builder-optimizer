@@ -57,6 +57,7 @@ function UploadForm({ projectId, onClose }: { projectId: string; onClose: () => 
               <Banner
                 status="success"
                 title={`${count(result.created)} added, ${count(result.updated)} updated`}
+                description="Map pins are still being looked up — new customers appear on the map as their addresses are found."
               />
             )}
             {result?.ok === false && (
