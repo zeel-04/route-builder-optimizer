@@ -4,7 +4,7 @@ import { useEffect } from 'react'
 import { MapContainer, Marker, Tooltip, useMap } from 'react-leaflet'
 import { useTheme } from '@astryxdesign/core/theme'
 import type { Place } from '@/lib/features/places/types'
-import { BaseTiles, DEFAULT_CENTER, DEFAULT_ZOOM, pinIcon } from './leaflet-map'
+import { BaseTiles, DEFAULT_CENTER, DEFAULT_ZOOM, pinIcon, SEARCH_PIN_COLOR } from './leaflet-map'
 
 /** Plain map with at most one searched place on it. */
 export function ExploreLeafletMap({ place, zoom }: { place: Place | null; zoom: number }) {
@@ -16,7 +16,7 @@ export function ExploreLeafletMap({ place, zoom }: { place: Place | null; zoom: 
       {place && (
         <Marker
           position={[place.latitude, place.longitude]}
-          icon={pinIcon(theme.token('--color-accent'), theme.token('--color-on-dark'), 28, 1)}
+          icon={pinIcon(SEARCH_PIN_COLOR, theme.token('--color-on-dark'), 28, 1)}
           title={place.label}
         >
           <Tooltip direction="top" opacity={1} className="route-pin-tip" permanent>

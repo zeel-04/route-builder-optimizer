@@ -44,6 +44,7 @@ class CustomerListFilterSerializer(serializers.Serializer):
     state = serializers.CharField(required=False, allow_blank=True, default="")
     county = serializers.CharField(required=False, allow_blank=True, default="")
     city = serializers.CharField(required=False, allow_blank=True, default="")
+    zipcode = serializers.CharField(required=False, allow_blank=True, default="")
     search = serializers.CharField(required=False, allow_blank=True, default="")
 
 

@@ -3,16 +3,22 @@
 import { useState, useTransition } from 'react'
 import { Banner } from '@astryxdesign/core/Banner'
 import { Button } from '@astryxdesign/core/Button'
-import { Code } from '@astryxdesign/core/Code'
+import { Card } from '@astryxdesign/core/Card'
 import { Dialog, DialogHeader } from '@astryxdesign/core/Dialog'
 import { FileInput } from '@astryxdesign/core/FileInput'
 import { Layout, LayoutContent, LayoutFooter } from '@astryxdesign/core/Layout'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
+import { useToast } from '@astryxdesign/core/Toast'
 import { uploadCustomersAction } from '@/lib/features/customers/api'
 import type { UploadState } from '@/lib/features/customers/types'
 
 const HEADER = 'customer_code,name,address,address2,state,zipcode'
+
+// The street lookup misses when a suite or unit is left in `address`, and the
+// pin falls back to the ZIP code — so the prompt moves it to address2.
+const CONVERT_PROMPT = `Convert my attached customer list to a CSV file with exactly this header: ${HEADER}
+Put only the street number and street name in address; move any suite, unit, apt, #, floor or building into address2. Use the 2-letter state code and a 5-digit ZIP code, keeping leading zeros. Keep every row and leave missing values blank instead of guessing.`
 
 const MAX_DETAILS = 20
 
@@ -22,6 +28,12 @@ function UploadForm({ projectId, onClose }: { projectId: string; onClose: () => 
   const [file, setFile] = useState<File | null>(null)
   const [result, setResult] = useState<UploadState>(null)
   const [pending, startUpload] = useTransition()
+  const toast = useToast()
+
+  async function copyPrompt() {
+    await navigator.clipboard.writeText(CONVERT_PROMPT)
+    toast({ body: 'Prompt copied', uniqueID: 'convert-prompt' })
+  }
 
   function upload() {
     const formData = new FormData()
@@ -37,9 +49,14 @@ function UploadForm({ projectId, onClose }: { projectId: string; onClose: () => 
           <VStack gap={4}>
             <VStack gap={1}>
               <Text color="secondary">
-                Rows with an existing customer code update that customer. The first row must be this header:
+                Rows with an existing customer code update that customer. To convert a spreadsheet, attach it in ChatGPT or Claude with this prompt:
               </Text>
-              <Code>{HEADER}</Code>
+              <Card variant="muted" padding={3}>
+                <VStack gap={2} hAlign="start">
+                  <Text style={{ whiteSpace: 'pre-line' }}>{CONVERT_PROMPT}</Text>
+                  <Button label="Copy prompt" variant="secondary" size="sm" onClick={copyPrompt} />
+                </VStack>
+              </Card>
             </VStack>
             <FileInput
               label="CSV file"

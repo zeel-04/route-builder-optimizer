@@ -14,6 +14,7 @@ export default async function ExploreMapPage({
     county: first(params.county),
     city: first(params.city),
     address: first(params.address),
+    zipcode: first(params.zipcode),
   }
   const hasQuery = Object.values(query).some(Boolean)
   const place = hasQuery ? await searchPlace(query) : null

@@ -3,7 +3,15 @@ from django.db.models import Q, QuerySet
 from api.customers.models import Customer
 
 
-def customer_list(*, project, state: str = "", county: str = "", city: str = "", search: str = ""):
+def customer_list(
+    *,
+    project,
+    state: str = "",
+    county: str = "",
+    city: str = "",
+    zipcode: str = "",
+    search: str = "",
+):
     qs: QuerySet[Customer] = Customer.objects.filter(project=project).select_related(
         "route_stop__route"
     )
@@ -13,6 +21,8 @@ def customer_list(*, project, state: str = "", county: str = "", city: str = "",
         qs = qs.filter(county__iexact=county)
     if city:
         qs = qs.filter(city__iexact=city)
+    if zipcode:
+        qs = qs.filter(zipcode__startswith=zipcode)  # a ZIP+4 still matches its 5 digits
     if search:
         qs = qs.filter(Q(address__icontains=search) | Q(zipcode__startswith=search))
     return qs.order_by("name")

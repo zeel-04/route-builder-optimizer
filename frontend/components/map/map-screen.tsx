@@ -9,7 +9,7 @@ import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { useMediaQuery } from '@astryxdesign/core/hooks'
 import { Layout, LayoutContent, LayoutFooter, LayoutPanel } from '@astryxdesign/core/Layout'
 import type { Customer, CustomerFilters, FilterOptions } from '@/lib/features/customers/types'
-import { hasPin } from '@/lib/features/customers/types'
+import { hasPin, LocationAccuracy } from '@/lib/features/customers/types'
 import type { Project } from '@/lib/features/projects/types'
 import type { RouteDetail, RouteDraft } from '@/lib/features/routes/types'
 import { CustomerMap } from './customer-map'
@@ -53,6 +53,7 @@ export function MapScreen({ project, customers, options, filters, route }: Props
   const stopIds = useMemo(() => new Set(draft.stops.map((s) => s.id)), [draft.stops])
   const unpinned = customers.filter((c) => !hasPin(c)).length
   const pending = customers.filter((c) => c.is_geocode_pending).length
+  const approximate = customers.filter((c) => c.location_accuracy === LocationAccuracy.ZIP).length
   const hasFilters = Object.values(filters).some(Boolean)
 
   function addStop(customer: Customer) {
@@ -82,6 +83,7 @@ export function MapScreen({ project, customers, options, filters, route }: Props
             total={customers.length}
             pending={pending}
             notFound={unpinned - pending}
+            approximate={approximate}
           />
         }
         content={
@@ -90,7 +92,7 @@ export function MapScreen({ project, customers, options, filters, route }: Props
               <Center height="100%">
                 <EmptyState
                   title="No customers match"
-                  description="Try another state, county or city, or clear the search."
+                  description="Try another state, county, city or ZIP code, or clear the search."
                   actions={
                     hasFilters && <Button label="Clear filters" href={route ? `${pathname}?route=${route.id}` : pathname} />
                   }
@@ -102,6 +104,7 @@ export function MapScreen({ project, customers, options, filters, route }: Props
                 draft={draft}
                 editingRouteId={route?.id ?? null}
                 onAddStop={addStop}
+                isSearching={!!(filters.search || filters.zipcode)}
                 filtersKey={JSON.stringify(filters)}
                 focus={route ? route.stops.map((s) => s.customer).filter(hasPin) : []}
                 focusNonce={synced.focusNonce}

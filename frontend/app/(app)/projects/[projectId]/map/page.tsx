@@ -18,6 +18,7 @@ export default async function MapPage({ params, searchParams }: Props) {
     state: first(query.state),
     county: first(query.county),
     city: first(query.city),
+    zipcode: first(query.zipcode),
     search: first(query.search),
   }
   const routeId = first(query.route)

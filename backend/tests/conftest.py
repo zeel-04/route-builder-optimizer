@@ -180,8 +180,8 @@ class ApiClient:
 
 
 def _fake_search_place(self, **parts):
-    """Matches any search whose street contains 'Main'; everything else is a miss."""
-    if "Main" not in parts.get("street", ""):
+    """Matches a street containing 'Main' or the ZIP 07102; everything else is a miss."""
+    if "Main" not in parts.get("street", "") and parts.get("postalcode") != "07102":
         return None
     return PlaceResult(latitude=40.73, longitude=-74.17, label="12 Main St, Newark, NJ")
 

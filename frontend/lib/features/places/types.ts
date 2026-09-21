@@ -8,6 +8,7 @@ export type PlaceQuery = {
   county: string
   city: string
   address: string
+  zipcode: string
 }
 
 // Full names: the backend geocoder matches them more reliably than postal codes.

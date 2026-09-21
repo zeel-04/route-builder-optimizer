@@ -50,24 +50,49 @@ Response `200`: same `user` object shape as login (not wrapped).
 
 ## Projects
 
-Customers and routes live in a project. Projects are read-only here — a superuser creates them in the admin or with the `import_customers` command.
+Customers and routes live in a project. All endpoints are scoped to the caller's tenant.
 
 ### `GET /api/projects/`
 
-Response `200` — array ordered by name:
+Query params (all optional):
+
+| Param | Meaning |
+| --- | --- |
+| `search` | project name contains (case-insensitive) |
+| `page` | page number, from 1 |
+| `page_size` | default 25, max 100 |
+
+Response `200` — paginated, most recently updated first:
 
 ```json
-[
-  {
-    "id": "0f3a...",
-    "name": "Default",
-    "customer_count": 1850,
-    "route_count": 12,
-    "created_at": "2026-09-11T19:00:00Z",
-    "updated_at": "2026-09-11T19:00:00Z"
-  }
-]
+{
+  "count": 3,
+  "next": null,
+  "previous": null,
+  "results": [
+    {
+      "id": "0f3a...",
+      "name": "Default",
+      "customer_count": 1850,
+      "route_count": 12,
+      "created_at": "2026-09-11T19:00:00Z",
+      "updated_at": "2026-09-11T19:00:00Z"
+    }
+  ]
+}
 ```
+
+### `POST /api/projects/`
+
+Request: `{ "name": "Spring routes" }` (max 255 chars). Response `201`: the project. `400` if the tenant already has a project with that name.
+
+### `PATCH /api/projects/{id}/`
+
+Request: `{ "name": "New name" }` — the name is the only editable field. Response `200`: the project. `400` on a duplicate name, `404` for another tenant's project.
+
+### `DELETE /api/projects/{id}/`
+
+Response `204`. Deletes the project's customers and routes with it. `404` for another tenant's project.
 
 ### `GET /api/projects/{id}/`
 
@@ -85,6 +110,7 @@ Query params (`project` required, the rest optional; all exact case-insensitive 
 | `state` | 2-letter state code |
 | `county` | county name |
 | `city` | city name |
+| `zipcode` | ZIP code starts with (so a ZIP+4 still matches its 5 digits) |
 | `search` | matches address (contains) OR zipcode (starts with) |
 
 Response `200` — a plain array (no pagination), ordered by name:
@@ -109,7 +135,7 @@ Response `200` — a plain array (no pagination), ordered by name:
 ]
 ```
 
-`latitude`/`longitude`/`location_accuracy` are `null`/`""` until the customer has been geocoded. `location_accuracy` is `"street"` or `"zip"`.
+`latitude`/`longitude`/`location_accuracy` are `null`/`""` until the customer has been geocoded. `location_accuracy` is `"street"` or `"zip"` (`"zip"` = street not found, pin is the ZIP code's centre — shown as "Approximate" in the UI).
 
 ### `GET /api/customers/filter-options/`
 
@@ -136,7 +162,8 @@ Query params (all optional, but at least one must be non-blank):
 | `state` | state name or 2-letter code |
 | `county` | county name |
 | `city` | city name |
-| `address` | street address |
+| `address` | street number and name only — no suite, city or ZIP |
+| `zipcode` | 5-digit ZIP code |
 
 Response `200` — the best US match:
 

@@ -239,33 +239,37 @@ export function RouteBuilder({ projectId, route, draft, onChange, onClose }: Pro
                   ))}
                 </List>
               )}
-              {/* Stays reachable while a long stop list scrolls under it. */}
-              <HStack
-                gap={2}
-                justify="evenly"
+              {/* Stays reachable while a long stop list scrolls under it. Sticky insets stop at the
+                  scroller's content edge, so reach down over its bottom padding or rows show below. */}
+              <div
                 style={{
                   marginTop: 'auto',
                   position: 'sticky',
-                  bottom: 0,
+                  bottom: 'calc(-1 * var(--spacing-4))',
+                  marginBottom: 'calc(-1 * var(--spacing-4))',
+                  zIndex: 1,
                   background: 'var(--color-background-surface)',
-                  paddingBlock: 'var(--spacing-1)',
+                  paddingTop: 'var(--spacing-1)',
+                  paddingBottom: 'var(--spacing-4)',
                 }}
               >
-                <Button
-                  variant="ghost"
-                  label="Optimize"
-                  icon={<Icon icon={ZapIcon} size="sm" />}
-                  isDisabled={!canOptimize}
-                  onClick={optimize}
-                />
-                <Button
-                  variant="ghost"
-                  label="Flip"
-                  icon={<Icon icon={FlipIcon} size="sm" />}
-                  isDisabled={draft.stops.length < 2}
-                  onClick={flip}
-                />
-              </HStack>
+                <HStack gap={2} justify="evenly">
+                  <Button
+                    variant="ghost"
+                    label="Optimize"
+                    icon={<Icon icon={ZapIcon} size="sm" />}
+                    isDisabled={!canOptimize}
+                    onClick={optimize}
+                  />
+                  <Button
+                    variant="ghost"
+                    label="Flip"
+                    icon={<Icon icon={FlipIcon} size="sm" />}
+                    isDisabled={draft.stops.length < 2}
+                    onClick={flip}
+                  />
+                </HStack>
+              </div>
             </VStack>
           </LayoutContent>
         }

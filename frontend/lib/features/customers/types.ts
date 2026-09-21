@@ -28,6 +28,7 @@ export type CustomerFilters = {
   state: string
   county: string
   city: string
+  zipcode: string
   search: string
 }
 
