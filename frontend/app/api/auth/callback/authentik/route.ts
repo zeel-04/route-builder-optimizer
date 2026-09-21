@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { ApiError, apiFetchPublic } from '@/lib/client'
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS } from '@/lib/dal'
-import { OIDC_REDIRECT_URI, oidcConfig, ssoEnabled } from '@/lib/features/auth/oidc'
+import { ID_TOKEN_COOKIE, OIDC_REDIRECT_URI, oidcConfig, ssoEnabled } from '@/lib/features/auth/oidc'
 import { OIDC_COOKIE_OPTIONS, STATE_COOKIE, VERIFIER_COOKIE } from '@/lib/features/auth/pkce'
 import { loginResponseSchema, tokenResponseSchema } from '@/lib/features/auth/schema'
 import type { SsoErrorCode } from '@/lib/features/auth/sso-errors'
@@ -69,5 +69,6 @@ export async function GET(req: NextRequest) {
 
   const done = redirectTo('/projects')
   done.cookies.set(SESSION_COOKIE, token, SESSION_COOKIE_OPTIONS)
+  done.cookies.set(ID_TOKEN_COOKIE, parsed.data.id_token, SESSION_COOKIE_OPTIONS)
   return done
 }
