@@ -12,6 +12,12 @@ if (ssoEnabled) {
   if (missing.length) throw new Error(`SSO_ENABLED is on but missing: ${missing.join(', ')}`)
 }
 
+/**
+ * The ID token from sign-in, kept only to hand back at sign-out: the IdP refuses
+ * a post-logout redirect (400) unless `id_token_hint` names who is leaving.
+ */
+export const ID_TOKEN_COOKIE = 'id_token'
+
 /** Registered with the IdP. Changing this path breaks the flow. */
 export const OIDC_REDIRECT_URI = `${process.env.APP_URL}/api/auth/callback/authentik`
 

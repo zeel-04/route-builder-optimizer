@@ -5,7 +5,7 @@ import { redirect } from 'next/navigation'
 import { z } from 'zod'
 import { ApiError, apiFetch, apiFetchPublic } from '@/lib/client'
 import { SESSION_COOKIE, SESSION_COOKIE_OPTIONS, verifySession } from '@/lib/dal'
-import { oidcConfig, ssoEnabled } from './oidc'
+import { ID_TOKEN_COOKIE, oidcConfig, ssoEnabled } from './oidc'
 import { loginInputSchema, loginResponseSchema, userSchema } from './schema'
 
 export async function getMe() {
@@ -46,11 +46,19 @@ export async function logoutAction() {
   } catch (err) {
     if (!(err instanceof ApiError)) throw err // token already dead: still clear the cookie
   }
-  ;(await cookies()).delete(SESSION_COOKIE)
+  const jar = await cookies()
+  const idToken = jar.get(ID_TOKEN_COOKIE)?.value
+  jar.delete(SESSION_COOKIE)
+  jar.delete(ID_TOKEN_COOKIE)
   if (!ssoEnabled) redirect('/login')
 
   // End the IdP session too, otherwise the next sign-in silently re-authenticates.
   const { end_session_endpoint } = await oidcConfig()
-  const params = new URLSearchParams({ post_logout_redirect_uri: `${process.env.APP_URL}/login` })
-  redirect(`${end_session_endpoint}?${params}`)
+  // The IdP answers 400 to a post-logout redirect without id_token_hint. A session
+  // from before the ID token was kept has none: end the IdP session without the
+  // redirect rather than strand the user on an error page.
+  const params = new URLSearchParams(
+    idToken ? { id_token_hint: idToken, post_logout_redirect_uri: `${process.env.APP_URL}/login` } : {},
+  )
+  redirect(params.size ? `${end_session_endpoint}?${params}` : end_session_endpoint)
 }
