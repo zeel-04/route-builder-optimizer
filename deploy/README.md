@@ -6,13 +6,15 @@ push to main ──► GitHub Actions ──► Docker Hub (sjenterprise/global:
                        └─ ssh ──► EC2 (us-east-1, t3a.small, Ubuntu)
                                    └─ docker compose
                                         ├─ caddy    :80/:443, automatic Let's Encrypt TLS
-                                        └─ backend  gunicorn :8000 (compose-internal only)
+                                        ├─ backend  gunicorn :8000 (compose-internal only)
+                                        └─ worker   manage.py db_worker, same image
 
 push to main ──► Amplify (SSR) ──► https://route-builder.sjenterpriseusa.com
                                         └─ server-side fetch ─► https://api.route-builder.sjenterpriseusa.com/api
 ```
 
-Postgres is Supabase. There is no database, cache, or worker on the box.
+Postgres is Supabase. There is no database or cache on the box, and no broker: background tasks are rows
+in Postgres (Django Tasks with `django-tasks-db`) that the `worker` container runs.
 
 ## Backend
 
@@ -36,7 +38,22 @@ docker compose run --rm --entrypoint python backend manage.py showmigrations | g
 docker compose run --rm --entrypoint python backend manage.py migrate
 ```
 
-Other management commands run the same way, e.g. the long geocoding pass:
+### Background tasks
+
+Uploading, adding or re-addressing a customer queues a `geocode_tenant` task. The `worker` container runs
+them one ~25-customer batch at a time (Nominatim allows 1 request/second); a batch queues the next while
+any customer is still untried. On start the worker queues a task for anything a killed batch left behind.
+Keep it to one worker: a second one doubles the request rate against Nominatim.
+
+```
+docker compose logs -f worker
+docker compose run --rm --entrypoint python backend manage.py prune_db_task_results   # old task rows
+```
+
+Task history is in the Django admin under *Task results*.
+
+Other management commands run the same way, e.g. a manual geocoding pass that also retries every
+address that wasn't found:
 
 ```
 nohup docker compose run --rm --entrypoint python backend manage.py geocode_customers --tenant '<Tenant name>' > geocode.log 2>&1 &

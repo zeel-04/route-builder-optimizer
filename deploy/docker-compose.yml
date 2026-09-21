@@ -14,6 +14,18 @@ services:
       retries: 3
       start_period: 20s
 
+  # Runs queued background tasks (geocoding). Exactly one of these: a single
+  # process is what keeps Nominatim to one caller at its 1 req/sec limit.
+  worker:
+    image: ${IMAGE}
+    env_file: [.env]
+    restart: unless-stopped
+    # Queue whatever a killed task left behind, then work the queue. `exec` so
+    # the stop signal reaches db_worker, which finishes the batch in hand first.
+    entrypoint: ["sh", "-c", "python manage.py enqueue_pending_geocodes && exec python manage.py db_worker --interval 3"]
+    # A batch is ~1 minute; Docker's default 10s would kill it on every deploy.
+    stop_grace_period: 2m
+
   caddy:
     image: caddy:2-alpine
     depends_on: [backend]

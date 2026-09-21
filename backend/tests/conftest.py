@@ -187,6 +187,13 @@ def _fake_search_place(self, **parts):
 
 
 @pytest.fixture(autouse=True)
+def _recorded_tasks(settings):
+    """Enqueued tasks are recorded on the backend (`.results`) instead of being
+    written to a queue no worker reads. A fresh backend per test."""
+    settings.TASKS = {"default": {"BACKEND": "django_tasks.backends.dummy.DummyBackend"}}
+
+
+@pytest.fixture(autouse=True)
 def _no_network_geocoder(monkeypatch):
     monkeypatch.setattr(NominatimGeocoder, "search_place", _fake_search_place)
 

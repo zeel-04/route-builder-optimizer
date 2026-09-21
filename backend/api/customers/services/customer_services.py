@@ -1,12 +1,11 @@
 import csv
-import threading
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import IO
 
 from django.conf import settings
 from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import connection, transaction
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 from django.utils.module_loading import import_string
@@ -17,6 +16,7 @@ from api.core.exceptions import ApplicationError
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import AddressQuery
+from api.customers.tasks import geocode_tenant
 from api.projects.models import Project
 from api.routes.models import Route, RouteStop
 
@@ -51,33 +51,16 @@ class ImportResult:
     total: int
 
 
-_geocode_lock = threading.Lock()
-
-
 def _schedule_geocode(tenant: Tenant) -> None:
-    """Nothing else fills in coordinates, so customers created through the API
-    have no map pin until this runs. Nominatim's 1 req/sec cap makes it far too
-    slow for the request itself, so it runs after the rows are committed.
+    """Nothing else fills in coordinates, so a customer written through the API
+    has no map pin until this runs. Nominatim's 1 req/sec cap makes it far too
+    slow for the request itself, so the worker does it (see tasks.py).
 
-    ponytail: in-process thread, so a restart drops the run in flight and
-    every web instance geocodes its own uploads. Both are self-correcting —
-    the service only ever looks at rows still missing a latitude — and the
-    lock keeps this process to one Nominatim call at a time. Move it to a
-    task queue when a dropped run costs more than the next upload.
+    Call it inside the transaction that wrote the customer: the task is a row
+    in the same database, so it commits with the customer or not at all, and
+    the worker can't see it any earlier.
     """
-
-    def run() -> None:
-        with _geocode_lock:
-            try:
-                CustomerGeocodeService().execute(tenant=tenant)
-            except Exception:
-                logger.exception("background geocode failed", tenant_id=str(tenant.id))
-            finally:
-                # No request ends this thread, so nothing else would hand the
-                # pooler its connection back (CONN_MAX_AGE is 0).
-                connection.close()
-
-    threading.Thread(target=run, name="geocode", daemon=False).start()
+    geocode_tenant.enqueue(tenant_id=str(tenant.id))
 
 
 class CustomerCreateService:
@@ -89,7 +72,7 @@ class CustomerCreateService:
         logger.info(
             "customer created", project_id=str(project.id), customer_code=customer.customer_code
         )
-        transaction.on_commit(lambda: _schedule_geocode(project.tenant))
+        _schedule_geocode(project.tenant)
         return customer
 
 
@@ -115,7 +98,7 @@ class CustomerUpdateService:
             "customer updated", customer_id=str(customer.id), fields=sorted(values)
         )
         if customer.latitude is None:
-            transaction.on_commit(lambda: _schedule_geocode(customer.tenant))
+            _schedule_geocode(customer.tenant)
         return customer
 
 
@@ -201,7 +184,7 @@ class CustomerImportService:
         logger.info(
             "customers imported", project_id=str(project.id), created=created, updated=updated
         )
-        transaction.on_commit(lambda: _schedule_geocode(project.tenant))
+        _schedule_geocode(project.tenant)
         return ImportResult(created=created, updated=updated, total=created + updated)
 
 
