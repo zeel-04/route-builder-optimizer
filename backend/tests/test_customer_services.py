@@ -240,3 +240,30 @@ def test_pending_flag_separates_untried_from_not_found(db):
     assert not is_pending()  # tried, not found
     CustomerUpdateService().execute(customer=Customer.objects.get(pk=customer.pk), address="2 Bad St")
     assert is_pending()  # new address, not tried yet
+
+
+def test_geocode_does_not_pin_a_customer_re_addressed_mid_lookup(db):
+    """The result belongs to the address that was looked up. Saving it over a
+    new address would pin the customer in the wrong place and mark it done."""
+    tenant = Tenant.objects.create(name="Moved T")
+    project = Project.objects.create(tenant=tenant, name="Moved P")
+    customer = Customer.objects.create(
+        tenant=tenant, project=project, customer_code="1", name="A",
+        address="1 Ok St", state="NY", zipcode="12201",
+    )
+
+    class MovingGeocoder(FakeGeocoder):
+        """The customer's address is edited while it is being looked up."""
+
+        def geocode(self, query):
+            CustomerUpdateService().execute(
+                customer=Customer.objects.get(pk=customer.pk), address="2 Ok St"
+            )
+            return super().geocode(query)
+
+    CustomerGeocodeService(geocoder=MovingGeocoder()).execute(tenant=tenant)
+
+    customer.refresh_from_db()
+    assert customer.address == "2 Ok St"
+    assert customer.latitude is None  # not the old address's pin
+    assert customer.geocode_attempted_at is None  # still untried, so it gets picked up

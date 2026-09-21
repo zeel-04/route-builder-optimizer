@@ -244,12 +244,17 @@ class CustomerGeocodeService:
                     accuracy=result.accuracy,
                 )
 
-            # A sweep takes minutes, so a customer can be deleted while it
-            # runs. An UPDATE just matches no rows; customer.save(update_fields)
-            # raises there and abandons every row still left in the run.
+            # The lookup takes a second or more, and the customer can be deleted
+            # or re-addressed meanwhile. Matching on the address that was looked
+            # up makes both a no-op: a deleted row is gone (customer.save() would
+            # raise and abandon the run), and a re-addressed one must not get the
+            # old address's pin — it stays untried for the task its edit queued.
             # updated_at is auto_now, which .update() doesn't apply itself.
-            Customer.objects.filter(pk=customer.pk).update(
-                updated_at=timezone.now(), **fields
-            )
+            Customer.objects.filter(
+                pk=customer.pk,
+                address=customer.address,
+                state=customer.state,
+                zipcode=customer.zipcode,
+            ).update(updated_at=timezone.now(), **fields)
 
         return GeocodeRunResult(street=street, zip=zip_, failed=failed)
