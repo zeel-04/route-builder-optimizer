@@ -20,16 +20,23 @@ in Postgres (Django Tasks with `django-tasks-db`) that the `worker` container ru
 
 `.github/workflows/deploy-backend.yml` runs on pushes to `main` that touch `backend/`, `deploy/`, or the
 workflow itself (or manually via *Run workflow*). It builds the image, copies this directory to
-`~/app/deploy` on the instance, writes `~/app/deploy/.env` from the repository's Actions secrets, runs
-`docker compose pull && docker compose up -d`, then polls `/healthz/` over HTTPS and fails if it never
+`~/app/deploy` on the instance, writes `~/app/deploy/.env` from the repository's Actions secrets, pulls the
+image, migrates, runs `docker compose up -d`, then polls `/healthz/` over HTTPS and fails if it never
 answers.
 
 The container runs `collectstatic` on start and serves static files itself (WhiteNoise). TLS and the
 domain live in `Caddyfile`; certificates persist in the `caddy_data` volume.
 
-### Migrations are manual
+### Migrations
 
-The container never migrates. When a release carries migrations, apply them yourself after the deploy:
+The deploy runs `manage.py migrate` with the new image after `docker compose pull` and before
+`docker compose up -d`. A failed migration aborts the deploy and the old containers keep serving.
+
+The old code runs against the new schema for the few seconds in between, so a migration the old code
+can't live with (dropping or renaming a column it reads) ships in two releases: stop using it first, remove
+it second.
+
+To run one by hand:
 
 ```
 ssh -i ~/.ssh/route-builder.pem ubuntu@<EC2_HOST>
