@@ -30,5 +30,8 @@ python_files = ["test_*.py"]
 # which makes DROP DATABASE at teardown flaky. Reuse it across runs instead
 # of dropping/recreating every time; run `pytest --create-db` once after a
 # migration change to force a rebuild.
-addopts = "--reuse-db"
+# `live` tests call the real Nominatim/Census APIs; run them before a deploy
+# with `uv run pytest -m live`.
+addopts = "--reuse-db -m 'not live'"
+markers = ["live: calls the real geocoding APIs over the network"]
 
