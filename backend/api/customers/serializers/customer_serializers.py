@@ -5,6 +5,7 @@ class RouteRefOutputSerializer(serializers.Serializer):
     id = serializers.UUIDField()
     name = serializers.CharField()
     color = serializers.CharField()
+    sequence = serializers.IntegerField()  # this customer's stop number on the route
 
 
 class CustomerListOutputSerializer(serializers.Serializer):
@@ -36,7 +37,10 @@ class CustomerListOutputSerializer(serializers.Serializer):
         stop = getattr(obj, "route_stop", None)
         if stop is None:
             return None
-        return RouteRefOutputSerializer(stop.route).data
+        route = stop.route
+        return RouteRefOutputSerializer(
+            {"id": route.id, "name": route.name, "color": route.color, "sequence": stop.sequence}
+        ).data
 
 
 class CustomerListFilterSerializer(serializers.Serializer):

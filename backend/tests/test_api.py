@@ -23,9 +23,7 @@ def _assert_body(actual, expected):
             assert len(actual) == count
         if expected:
             assert actual, "expected at least one item to check keys against"
-            for key, value in expected.items():
-                if value is not None:
-                    assert actual[0][key] == value
+            _assert_body(actual[0], expected)
         return
     for key, value in expected.items():
         if value is None:

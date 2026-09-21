@@ -5,6 +5,7 @@ export const routeRefSchema = z.object({
   id: z.string(),
   name: z.string(),
   color: z.string(),
+  sequence: z.number(), // this customer's stop number on the route
 })
 
 export const customerSchema = z.object({

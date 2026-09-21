@@ -11,6 +11,17 @@
     "expected_body": {"__count__": 1, "customer_code": "A-FREE-1", "state": "NY"}
   },
   {
+    "id": "CUST-LIST-ROUTE-001",
+    "description": "A customer on a route carries the route and its stop number",
+    "method": "GET",
+    "endpoint": "/api/customers/",
+    "headers": {"Authorization": "Bearer {token_a}"},
+    "payload": null,
+    "query_params": {"project": "{tenant_a_project_id}", "search": "12203"},
+    "expected_status": 200,
+    "expected_body": {"__count__": 1, "customer_code": "A-TAKEN-1", "route": {"name": "Route A", "sequence": 1}}
+  },
+  {
     "id": "CUST-LIST-ZIP-001",
     "description": "ZIP code filter matches by prefix and combines with the other filters",
     "method": "GET",
