@@ -12,11 +12,13 @@ import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Table, pixel, type TableColumn } from '@astryxdesign/core/Table'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useToast } from '@astryxdesign/core/Toast'
+import { Token } from '@astryxdesign/core/Token'
+import { Tooltip } from '@astryxdesign/core/Tooltip'
 import { AddCustomerButton, EditCustomerDialog } from '@/components/customers/add-customer-dialog'
 import { UploadCustomersButton } from '@/components/customers/upload-customers-dialog'
 import { useUrlSearch } from '@/components/use-url-search'
 import { deleteCustomerAction } from '@/lib/features/customers/api'
-import { CUSTOMER_PAGE_SIZE, type Customer } from '@/lib/features/customers/types'
+import { CUSTOMER_PAGE_SIZE, LocationAccuracy, type Customer } from '@/lib/features/customers/types'
 
 const columns: TableColumn<Customer>[] = [
   { key: 'customer_code', header: 'Code' },
@@ -24,7 +26,18 @@ const columns: TableColumn<Customer>[] = [
   {
     key: 'address',
     header: 'Address',
-    renderCell: (c) => [c.address, c.address2].filter(Boolean).join(', '),
+    renderCell: (c) => {
+      const address = [c.address, c.address2].filter(Boolean).join(', ')
+      if (c.location_accuracy !== LocationAccuracy.ZIP) return address
+      return (
+        <VStack gap={1} hAlign="start">
+          {address}
+          <Tooltip content="Street not found. The map pin is at the ZIP code.">
+            <Token size="sm" color="yellow" label="Approximate" />
+          </Tooltip>
+        </VStack>
+      )
+    },
   },
   { key: 'city', header: 'City', renderCell: (c) => c.city || '—' },
   { key: 'state', header: 'State' },
@@ -76,7 +89,7 @@ export function CustomersSection({ projectId, customers, page, total, search, ha
     {
       key: 'actions',
       header: 'Actions',
-      width: pixel(64),
+      width: pixel(96), // 64 clips the "Actions" header
       align: 'end',
       renderCell: (c) => (
         <DropdownMenu

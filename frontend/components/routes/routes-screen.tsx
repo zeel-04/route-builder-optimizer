@@ -11,13 +11,14 @@ import { Layout, LayoutContent, LayoutHeader } from '@astryxdesign/core/Layout'
 import { Link } from '@astryxdesign/core/Link'
 import { MoreMenu } from '@astryxdesign/core/MoreMenu'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { pixel, Table, type TableColumn, type TablePlugin } from '@astryxdesign/core/Table'
+import { pixel, Table, type TableColumn } from '@astryxdesign/core/Table'
 import { Tab, TabList } from '@astryxdesign/core/TabList'
 import { Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Timestamp } from '@astryxdesign/core/Timestamp'
 import { useToast } from '@astryxdesign/core/Toast'
 import { RouteColorDot } from '@/components/route-color-dot'
+import { tableRowLink } from '@/components/table-row-link'
 import { useUrlSearch } from '@/components/use-url-search'
 import type { Project } from '@/lib/features/projects/types'
 import { deleteRouteAction, getRoute } from '@/lib/features/routes/api'
@@ -47,24 +48,7 @@ export function RoutesScreen({ project, routes, search, hasRoutes, tab, children
   const mapHref = `/projects/${project.id}/map`
   const routeHref = (route: Route) => `${mapHref}?route=${route.id}`
 
-  // Astryx Table has no row link: the whole row opens the route, while the name
-  // stays a real link for keyboard and new-tab use.
-  const rowLink: TablePlugin<Route> = {
-    transformBodyRow: (props, route) => ({
-      ...props,
-      htmlProps: {
-        ...props.htmlProps,
-        style: { ...props.htmlProps.style, cursor: 'pointer' },
-        onClick: (event) => {
-          const target = event.target as Element
-          // Skip the name link, the ⋯ menu, and anything portaled out of the row
-          // (menu items, hover cards) whose clicks still bubble through React.
-          if (!event.currentTarget.contains(target) || target.closest('a, button, [role="menuitem"]')) return
-          router.push(routeHref(route))
-        },
-      },
-    }),
-  }
+  const rowLink = tableRowLink<Route>((href) => router.push(href), routeHref)
 
   // ponytail: the list rows carry no stops, so the link is built after a fetch.
   // Safari can reject a clipboard write that late; move to a link column if that bites.
@@ -112,7 +96,7 @@ export function RoutesScreen({ project, routes, search, hasRoutes, tab, children
     },
     {
       key: 'id',
-      header: '',
+      header: 'Actions',
       width: pixel(290),
       align: 'end',
       renderCell: (route) => (
