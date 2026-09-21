@@ -103,7 +103,10 @@ class CustomerUpdateService:
         # Same rule as the import: a moved customer drops its pin so the
         # geocoder (which only picks rows with no latitude) runs again.
         if any(getattr(customer, field) != values[field] for field in GEOCODE_FIELDS if field in values):
-            values.update(latitude=None, longitude=None, location_accuracy="", city="", county="")
+            values.update(
+                latitude=None, longitude=None, location_accuracy="", city="", county="",
+                geocode_attempted_at=None,  # the new address hasn't been tried
+            )
         for field, value in values.items():
             setattr(customer, field, value)
         customer.full_clean()  # also checks unique (project, customer_code) -> 400
@@ -183,7 +186,10 @@ class CustomerImportService:
             # the geocoder only looks at rows with no latitude.
             Customer.objects.filter(project=project, customer_code=code).exclude(
                 address=values["address"], state=values["state"], zipcode=values["zipcode"]
-            ).update(latitude=None, longitude=None, location_accuracy="", city="", county="")
+            ).update(
+                latitude=None, longitude=None, location_accuracy="", city="", county="",
+                geocode_attempted_at=None,  # the new address hasn't been tried
+            )
             _, was_created = Customer.objects.update_or_create(
                 project=project,
                 customer_code=code,
@@ -228,42 +234,39 @@ class CustomerGeocodeService:
 
         street = zip_ = failed = 0
         for customer in queryset:
-            customer.geocode_attempted_at = timezone.now()
             result = self._geocoder.geocode(
                 AddressQuery(street=customer.address, zipcode=customer.zipcode, state=customer.state)
             )
+            fields = {"geocode_attempted_at": timezone.now()}
             if result is None:
                 failed += 1
-                customer.save(update_fields=["geocode_attempted_at"])
                 logger.warning(
                     "geocode failed",
                     customer_code=customer.customer_code,
                     tenant_id=str(tenant.id),
                 )
-                continue
+            else:
+                fields.update(
+                    latitude=result.latitude,
+                    longitude=result.longitude,
+                    location_accuracy=result.accuracy,
+                    city=result.city,
+                    county=result.county,
+                )
+                street += result.accuracy == "street"
+                zip_ += result.accuracy == "zip"
+                logger.info(
+                    "customer geocoded",
+                    customer_code=customer.customer_code,
+                    accuracy=result.accuracy,
+                )
 
-            customer.latitude = result.latitude
-            customer.longitude = result.longitude
-            customer.location_accuracy = result.accuracy
-            customer.city = result.city
-            customer.county = result.county
-            customer.save(
-                update_fields=[
-                    "latitude",
-                    "longitude",
-                    "location_accuracy",
-                    "city",
-                    "county",
-                    "geocode_attempted_at",
-                ]
-            )
-
-            street += result.accuracy == "street"
-            zip_ += result.accuracy == "zip"
-            logger.info(
-                "customer geocoded",
-                customer_code=customer.customer_code,
-                accuracy=result.accuracy,
+            # A sweep takes minutes, so a customer can be deleted while it
+            # runs. An UPDATE just matches no rows; customer.save(update_fields)
+            # raises there and abandons every row still left in the run.
+            # updated_at is auto_now, which .update() doesn't apply itself.
+            Customer.objects.filter(pk=customer.pk).update(
+                updated_at=timezone.now(), **fields
             )
 
         return GeocodeRunResult(street=street, zip=zip_, failed=failed)

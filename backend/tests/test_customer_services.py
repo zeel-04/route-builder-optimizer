@@ -4,11 +4,13 @@ from api.accounts.models import Tenant
 from api.customers.geocoders import Geocoder
 from api.customers.models import Customer
 from api.customers.schema import GeocodeResult
+from api.customers.serializers.customer_serializers import CustomerListOutputSerializer
 from api.customers.services import customer_services
 from api.customers.services.customer_services import (
     CustomerDeleteService,
     CustomerGeocodeService,
     CustomerImportService,
+    CustomerUpdateService,
 )
 from api.projects.models import Project
 from api.routes.models import Route, RouteStop
@@ -108,3 +110,48 @@ def test_import_schedules_geocode(db, django_capture_on_commit_callbacks, monkey
         CustomerImportService().execute(project=project, file=csv_file)
 
     assert scheduled == [tenant]
+
+
+def test_geocode_survives_a_customer_deleted_mid_run(db):
+    """The sweep runs for minutes, so a row can vanish under it. Losing one
+    must not abandon the customers still queued behind it."""
+    tenant = Tenant.objects.create(name="Race T")
+    project = Project.objects.create(tenant=tenant, name="Race P")
+    for code, address in [("1", "1 Ok St"), ("2", "2 Ok St")]:
+        Customer.objects.create(
+            tenant=tenant, project=project, customer_code=code, name=code,
+            address=address, state="NY", zipcode="12201",
+        )
+
+    class DeletingGeocoder(FakeGeocoder):
+        """Deletes customer 2 while customer 1 is being looked up."""
+
+        def geocode(self, query):
+            if query.street == "1 Ok St":
+                Customer.objects.filter(project=project, customer_code="2").delete()
+            return super().geocode(query)
+
+    result = CustomerGeocodeService(geocoder=DeletingGeocoder()).execute(tenant=tenant)
+
+    assert result.street == 2  # the deleted row still "succeeds", it just saves nothing
+    assert Customer.objects.get(project=project, customer_code="1").latitude is not None
+
+
+def test_pending_flag_separates_untried_from_not_found(db):
+    """The map's loader follows this flag: a lookup that ran and found nothing
+    must not keep it spinning, and a new address must start it again."""
+    tenant = Tenant.objects.create(name="Pending T")
+    project = Project.objects.create(tenant=tenant, name="Pending P")
+    customer = Customer.objects.create(
+        tenant=tenant, project=project, customer_code="1", name="A",
+        address="1 Bad St", state="NY", zipcode="12201",
+    )
+    is_pending = lambda: CustomerListOutputSerializer(  # noqa: E731
+        Customer.objects.get(pk=customer.pk)
+    ).data["is_geocode_pending"]
+
+    assert is_pending()  # never tried
+    CustomerGeocodeService(geocoder=FakeGeocoder()).execute(tenant=tenant)
+    assert not is_pending()  # tried, not found
+    CustomerUpdateService().execute(customer=Customer.objects.get(pk=customer.pk), address="2 Bad St")
+    assert is_pending()  # new address, not tried yet
