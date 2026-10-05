@@ -47,7 +47,7 @@ type Props = {
   draft: RouteDraft
   editingRouteId: string | null
   onAddStop: (customer: Customer) => void
-  /** A search is active, so every pin shown is a search result: paint them all red. */
+  /** A search is active: highlight unassigned results while preserving route colors. */
   isSearching: boolean
   /** Changes when the filters change: refit to the filtered pins. */
   filtersKey: string
@@ -116,13 +116,18 @@ function Pins({
   return pinned.map((c) => {
     const stopNumber = stopIndex.get(c.id)
     const otherRoute = c.route && c.route.id !== editingRouteId ? c.route : null
+    const assignmentLabel = stopNumber ? `On this route, stop ${stopNumber}` : otherRoute ? `Assigned to ${otherRoute.name}` : 'Unassigned'
     return (
       <Marker
-        key={c.id}
+        // Leaflet does not update title/alt on an existing marker. Remount when
+        // its assignment changes so keyboard and tooltip labels stay accurate.
+        key={`${c.id}:${assignmentLabel}`}
+        title={`${c.name} · ${assignmentLabel}`}
+        alt={`${c.name} · ${assignmentLabel}`}
         position={toLatLng(c)}
         icon={pinIcon(
           // Stops keep their number, so the route order still reads while searching.
-          isSearching ? SEARCH_PIN_COLOR : stopNumber ? draft.color : otherRoute ? otherRoute.color : neutralPin,
+          stopNumber ? draft.color : otherRoute ? otherRoute.color : isSearching ? SEARCH_PIN_COLOR : neutralPin,
           pinStroke,
           // Saved routes keep their numbers too, a size down from the route being built.
           stopNumber ? 28 : otherRoute ? 24 : 20,
@@ -145,6 +150,7 @@ function Pins({
                 Approximate location (ZIP code only)
               </Text>
             )}
+            <Text type="supporting">{stopNumber ? `On this route · Stop ${stopNumber}` : otherRoute ? `Assigned to ${otherRoute.name}` : 'Unassigned · Click to add to this route'}</Text>
           </VStack>
         </Tooltip>
       </Marker>

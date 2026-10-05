@@ -75,6 +75,7 @@ class CustomerCreateInputSerializer(serializers.Serializer):
 
 class ProjectCustomerListFilterSerializer(serializers.Serializer):
     search = serializers.CharField(required=False, allow_blank=True, default="")
+    assignment = serializers.ChoiceField(choices=["all", "assigned", "unassigned"], required=False, default="all")
 
 
 class CustomerUpdateInputSerializer(serializers.Serializer):

@@ -1,6 +1,7 @@
 import { notFound } from 'next/navigation'
 import { MapScreen } from '@/components/map/map-screen'
-import { getFilterOptions, listCustomers } from '@/lib/features/customers/api'
+import { getAssignmentSummary, getFilterOptions, listCustomers } from '@/lib/features/customers/api'
+import { assignmentFilter } from '@/lib/features/customers/types'
 import { getProject } from '@/lib/features/projects/api'
 import { getRoute } from '@/lib/features/routes/api'
 import { or404 } from '../or-404'
@@ -23,16 +24,17 @@ export default async function MapPage({ params, searchParams }: Props) {
   }
   const routeId = first(query.route)
 
-  const [project, customers, options, route] = await or404(
+  const [project, customers, options, route, summary] = await or404(
     Promise.all([
       getProject(projectId),
       listCustomers(projectId, filters),
       getFilterOptions(projectId, filters),
       routeId ? getRoute(routeId) : null,
+      getAssignmentSummary(projectId),
     ]),
   )
   // A route opened under another project's URL is as missing as one that doesn't exist.
   if (route && route.project_id !== project.id) notFound()
 
-  return <MapScreen project={project} customers={customers} options={options} filters={filters} route={route} />
+  return <MapScreen project={project} customers={customers} options={options} filters={filters} route={route} summary={summary} assignment={assignmentFilter(first(query.assignment))} />
 }

@@ -9,23 +9,28 @@ import { EmptyState } from '@astryxdesign/core/EmptyState'
 import { Icon } from '@astryxdesign/core/Icon'
 import { Pagination } from '@astryxdesign/core/Pagination'
 import { HStack, VStack } from '@astryxdesign/core/Stack'
-import { Table, pixel, type TableColumn } from '@astryxdesign/core/Table'
+import { Table, pixel, proportional, type TableColumn } from '@astryxdesign/core/Table'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { useToast } from '@astryxdesign/core/Toast'
 import { Token } from '@astryxdesign/core/Token'
+import { Text } from '@astryxdesign/core/Text'
+import { Link } from '@astryxdesign/core/Link'
 import { Tooltip } from '@astryxdesign/core/Tooltip'
 import { AddCustomerButton, EditCustomerDialog } from '@/components/customers/add-customer-dialog'
 import { UploadCustomersButton } from '@/components/customers/upload-customers-dialog'
+import { AssignmentFilters } from '@/components/customers/assignment-filters'
+import { RouteColorDot } from '@/components/route-color-dot'
 import { useUrlSearch } from '@/components/use-url-search'
 import { deleteCustomerAction } from '@/lib/features/customers/api'
-import { CUSTOMER_PAGE_SIZE, LocationAccuracy, type Customer } from '@/lib/features/customers/types'
+import { CUSTOMER_PAGE_SIZE, LocationAccuracy, type AssignmentFilter, type AssignmentSummary, type Customer } from '@/lib/features/customers/types'
 
 const columns: TableColumn<Customer>[] = [
-  { key: 'customer_code', header: 'Code' },
-  { key: 'name', header: 'Name' },
+  { key: 'customer_code', header: 'Code', width: pixel(88) },
+  { key: 'name', header: 'Name', width: proportional(1) },
   {
     key: 'address',
     header: 'Address',
+    width: proportional(1.5),
     renderCell: (c) => {
       const address = [c.address, c.address2].filter(Boolean).join(', ')
       if (c.location_accuracy !== LocationAccuracy.ZIP) return address
@@ -39,9 +44,9 @@ const columns: TableColumn<Customer>[] = [
       )
     },
   },
-  { key: 'city', header: 'City', renderCell: (c) => c.city || '—' },
-  { key: 'state', header: 'State' },
-  { key: 'zipcode', header: 'ZIP code' },
+  { key: 'city', header: 'City', width: proportional(1), renderCell: (c) => c.city || '—' },
+  { key: 'state', header: 'State', width: pixel(72) },
+  { key: 'zipcode', header: 'ZIP code', width: pixel(96) },
 ]
 
 type Props = {
@@ -53,15 +58,19 @@ type Props = {
   search: string
   /** Whether the project has any customers at all, regardless of `search`. */
   hasCustomers: boolean
+  assignment: AssignmentFilter
+  summary: AssignmentSummary
+  projectSummary: AssignmentSummary
 }
 
 /** `customers` is the current page only; the page itself lives in `?page=`. */
-export function CustomersSection({ projectId, customers, page, total, search, hasCustomers }: Props) {
+export function CustomersSection({ projectId, customers, page, total, search, hasCustomers, assignment, summary, projectSummary }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const toast = useToast()
   const [isDeleting, startDelete] = useTransition()
+  const [isFiltering, startFilter] = useTransition()
   const { text, setText, clear: clearSearch, isSearching } = useUrlSearch(search)
   const [editing, setEditing] = useState<Customer | null>(null)
   // Kept after close so the dialog title doesn't blank out while it animates away.
@@ -75,6 +84,14 @@ export function CustomersSection({ projectId, customers, page, total, search, ha
     router.push(params.size ? `${pathname}?${params}` : pathname, { scroll: false })
   }
 
+  function filterAssignment(next: AssignmentFilter) {
+    const params = new URLSearchParams(searchParams)
+    if (next === 'all') params.delete('assignment')
+    else params.set('assignment', next)
+    params.delete('page')
+    startFilter(() => router.push(`${pathname}?${params}`, { scroll: false }))
+  }
+
   function remove() {
     if (!deleting) return
     startDelete(async () => {
@@ -86,6 +103,17 @@ export function CustomersSection({ projectId, customers, page, total, search, ha
 
   const tableColumns: TableColumn<Customer>[] = [
     ...columns,
+    {
+      key: 'route',
+      header: 'Route',
+      width: pixel(160),
+      renderCell: (c) => c.route ? (
+        <HStack gap={2} align="center">
+          <RouteColorDot color={c.route.color} />
+          <Link href={`/projects/${projectId}/map?route=${c.route.id}`}>{c.route.name}</Link>
+        </HStack>
+      ) : <Token size="sm" label="Unassigned" />,
+    },
     {
       key: 'actions',
       header: 'Actions',
@@ -117,6 +145,14 @@ export function CustomersSection({ projectId, customers, page, total, search, ha
 
   return (
     <VStack gap={4}>
+      {hasCustomers && (
+        <VStack gap={2}>
+          <AssignmentFilters value={assignment} summary={summary} onChange={filterAssignment} isDisabled={isFiltering || isSearching} />
+          <Text type="supporting" aria-live="polite">
+            {search ? `${summary.total} ${summary.total === 1 ? 'customer matches' : 'customers match'} your search · ${summary.unassigned} unassigned ${summary.unassigned === 1 ? 'match' : 'matches'} · ${projectSummary.unassigned} unassigned in project` : `${projectSummary.total} customers in project · ${projectSummary.unassigned} unassigned`}
+          </Text>
+        </VStack>
+      )}
       {hasCustomers && (
         <HStack justify="between" align="center" gap={2} wrap="wrap">
           <TextInput
@@ -157,9 +193,12 @@ export function CustomersSection({ projectId, customers, page, total, search, ha
       ) : total === 0 ? (
         <EmptyState
           icon={<Icon icon="search" size="lg" color="secondary" />}
-          title="No customers match"
-          description={`Nothing matches “${search}”. Try a different name, address, or code.`}
-          actions={<Button label="Clear search" variant="secondary" onClick={clearSearch} />}
+          title={search ? 'No customers match' : assignment === 'unassigned' ? 'All customers are assigned' : 'No assigned customers'}
+          description={search ? `No ${assignment === 'all' ? '' : `${assignment} `}customers match “${search}”. Try a different search or assignment filter.` : assignment === 'unassigned' ? 'Every customer in this project has a route.' : 'Assign customers to a route to see them here.'}
+          actions={<HStack gap={2}>
+            {search && <Button label="Clear search" variant="secondary" onClick={clearSearch} />}
+            {assignment !== 'all' && <Button label="Show all customers" variant="secondary" onClick={() => filterAssignment('all')} />}
+          </HStack>}
         />
       ) : (
         <>

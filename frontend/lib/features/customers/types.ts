@@ -1,6 +1,7 @@
 import type { z } from 'zod'
 import type {
   customerCreateSchema,
+  assignmentSummarySchema,
   customerSchema,
   filterOptionsSchema,
   routeRefSchema,
@@ -11,6 +12,12 @@ export const LocationAccuracy = { STREET: 'street', ZIP: 'zip' } as const
 export type LocationAccuracy = (typeof LocationAccuracy)[keyof typeof LocationAccuracy]
 
 export type Customer = z.infer<typeof customerSchema>
+export type AssignmentSummary = z.infer<typeof assignmentSummarySchema>
+export type AssignmentFilter = 'all' | 'assigned' | 'unassigned'
+
+export function assignmentFilter(value: unknown): AssignmentFilter {
+  return value === 'assigned' || value === 'unassigned' ? value : 'all'
+}
 export type RouteRef = z.infer<typeof routeRefSchema>
 export type FilterOptions = z.infer<typeof filterOptionsSchema>
 export const CUSTOMER_PAGE_SIZE = 50

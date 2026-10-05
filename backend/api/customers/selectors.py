@@ -1,4 +1,4 @@
-from django.db.models import Q, QuerySet
+from django.db.models import Count, Q, QuerySet
 
 from api.customers.models import Customer
 
@@ -51,6 +51,26 @@ def customer_filter_options(*, project, state: str = "", county: str = "") -> di
         "counties": list(counties),
         "cities": list(cities),
     }
+
+
+def customer_assignment_summary(customers: QuerySet[Customer]) -> dict:
+    """Counts before pagination or assignment filtering, including unpinned customers."""
+    return customers.aggregate(
+        total=Count("id"),
+        assigned=Count("id", filter=Q(route_stop__isnull=False)),
+        unassigned=Count("id", filter=Q(route_stop__isnull=True)),
+        unassigned_without_location=Count(
+            "id", filter=Q(route_stop__isnull=True) & (Q(latitude__isnull=True) | Q(longitude__isnull=True))
+        ),
+    )
+
+
+def filter_customer_assignment(customers: QuerySet[Customer], assignment: str) -> QuerySet[Customer]:
+    if assignment == "assigned":
+        return customers.filter(route_stop__isnull=False)
+    if assignment == "unassigned":
+        return customers.filter(route_stop__isnull=True)
+    return customers
 
 
 def project_customer_list(*, project, search: str = "") -> QuerySet[Customer]:

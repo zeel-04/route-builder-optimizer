@@ -3,28 +3,29 @@ import { CustomersSection } from '@/components/customers/customers-section'
 import { RoutesScreen } from '@/components/routes/routes-screen'
 import { ApiError } from '@/lib/client'
 import { listProjectCustomers } from '@/lib/features/customers/api'
-import { CUSTOMER_PAGE_SIZE } from '@/lib/features/customers/types'
+import { assignmentFilter, CUSTOMER_PAGE_SIZE, type AssignmentFilter } from '@/lib/features/customers/types'
 import { getProject } from '@/lib/features/projects/api'
 import { listRoutes } from '@/lib/features/routes/api'
 import { or404 } from './or-404'
 
 type Props = {
   params: Promise<{ projectId: string }>
-  searchParams: Promise<{ tab?: string | string[]; page?: string | string[]; q?: string | string[] }>
+  searchParams: Promise<{ tab?: string | string[]; page?: string | string[]; q?: string | string[]; assignment?: string | string[] }>
 }
 
 /** Reads one customers page; a page past the end redirects to the last one instead of 404ing. */
-async function readCustomerPage(projectId: string, page: number, search: string) {
+async function readCustomerPage(projectId: string, page: number, search: string, assignment: AssignmentFilter) {
   try {
-    return await listProjectCustomers(projectId, page, search)
+    return await listProjectCustomers(projectId, page, search, assignment)
   } catch (err) {
     if (!(err instanceof ApiError && err.status === 404) || page === 1) throw err
   }
   // Page 1 never 404s for a real project, so this also surfaces a missing project as a 404.
-  const { count } = await listProjectCustomers(projectId, 1, search)
+  const { count } = await listProjectCustomers(projectId, 1, search, assignment)
   const last = Math.ceil(count / CUSTOMER_PAGE_SIZE)
   const params = new URLSearchParams({ tab: 'customers' })
   if (search) params.set('q', search)
+  if (assignment !== 'all') params.set('assignment', assignment)
   if (last > 1) params.set('page', String(last))
   redirect(`/projects/${projectId}?${params}`)
 }
@@ -34,12 +35,13 @@ export default async function ProjectRoutesPage({ params, searchParams }: Props)
   const tab = query.tab === 'customers' ? 'customers' : 'routes'
   const page = Math.max(1, Math.floor(Number(query.page)) || 1)
   const search = typeof query.q === 'string' ? query.q : ''
+  const assignment = assignmentFilter(query.assignment)
 
   const [project, allRoutes, customers] = await or404(
     Promise.all([
       getProject(projectId),
       listRoutes(projectId),
-      tab === 'customers' ? readCustomerPage(projectId, page, search) : null,
+      tab === 'customers' ? readCustomerPage(projectId, page, search, assignment) : null,
     ]),
   )
   // ponytail: routes are filtered here since the list isn't paginated; move to the API if it ever is.
@@ -47,8 +49,7 @@ export default async function ProjectRoutesPage({ params, searchParams }: Props)
   const routes = allRoutes.filter((r) => r.name.toLowerCase().includes(routeSearch))
 
   // A search with no matches still shows the search bar, as long as the project has customers.
-  const hasCustomers =
-    !!customers && (customers.count > 0 || (!!search && (await listProjectCustomers(projectId, 1)).count > 0))
+  const hasCustomers = !!customers && customers.project_summary.total > 0
 
   return (
     <RoutesScreen
@@ -66,6 +67,9 @@ export default async function ProjectRoutesPage({ params, searchParams }: Props)
           total={customers.count}
           search={search}
           hasCustomers={hasCustomers}
+          assignment={assignment}
+          summary={customers.assignment_summary}
+          projectSummary={customers.project_summary}
         />
       )}
     </RoutesScreen>

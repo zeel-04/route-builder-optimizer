@@ -27,11 +27,20 @@ export const customerSchema = z.object({
   route: routeRefSchema.nullable(),
 })
 
+export const assignmentSummarySchema = z.object({
+  total: z.number(),
+  assigned: z.number(),
+  unassigned: z.number(),
+  unassigned_without_location: z.number(),
+})
+
 export const customerPageSchema = z.object({
   count: z.number(),
   next: z.string().nullable(),
   previous: z.string().nullable(),
   results: z.array(customerSchema),
+  assignment_summary: assignmentSummarySchema,
+  project_summary: assignmentSummarySchema,
 })
 
 export const filterOptionsSchema = z.object({

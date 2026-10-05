@@ -149,6 +149,22 @@ Response `200`:
 
 Lists are distinct, sorted, and exclude blanks.
 
+### `GET /api/customers/assignment-summary/`
+
+Requires `project`. Returns saved assignment counts for the entire project:
+
+```json
+{ "total": 100, "assigned": 70, "unassigned": 30, "unassigned_without_location": 3 }
+```
+
+Customers without either coordinate still count as customers. Projects in another tenant return `404`; unauthenticated requests return `401`.
+
+### `GET /api/projects/{id}/customers/`
+
+Optional query parameters: `search` (name, address, city, state, ZIP or customer code contains), `assignment` (`all`, `assigned`, `unassigned`; default `all`), `page` and `page_size` (default 50, maximum 200).
+
+Returns `count`, `next`, `previous`, and `results`, plus two assignment summaries with the shape above. `assignment_summary` counts search matches **before** the assignment filter and pagination; `project_summary` counts the entire project. `count` counts rows after search and assignment filtering. Results use stable customer code/id ordering. Invalid assignment values return `400`; pages past the end return `404` (the frontend redirects to the last valid page).
+
 ## Places
 
 ### `GET /api/places/search/`

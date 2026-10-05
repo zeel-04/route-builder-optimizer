@@ -5,13 +5,14 @@ import { z } from 'zod'
 import { ApiError, apiFetch, validationErrors } from '@/lib/client'
 import {
   customerCreateSchema,
+  assignmentSummarySchema,
   customerPageSchema,
   customerSchema,
   customerUploadSchema,
   filterOptionsSchema,
   uploadResultSchema,
 } from './schema'
-import { type AddCustomerState, CUSTOMER_PAGE_SIZE, type CustomerFilters, type UploadState } from './types'
+import { type AddCustomerState, type AssignmentFilter, CUSTOMER_PAGE_SIZE, type CustomerFilters, type UploadState } from './types'
 
 function query(params: Record<string, string>) {
   const search = new URLSearchParams(Object.entries(params).filter(([, v]) => v))
@@ -23,9 +24,13 @@ export async function listCustomers(projectId: string, filters: CustomerFilters)
 }
 
 /** One page of a project's customers, optionally searched. The backend 404s a page past the end. */
-export async function listProjectCustomers(projectId: string, page: number, search = '') {
+export async function getAssignmentSummary(projectId: string) {
+  return apiFetch(`/customers/assignment-summary/${query({ project: projectId })}`, assignmentSummarySchema)
+}
+
+export async function listProjectCustomers(projectId: string, page: number, search = '', assignment: AssignmentFilter = 'all') {
   return apiFetch(
-    `/projects/${projectId}/customers/${query({ page: String(page), page_size: String(CUSTOMER_PAGE_SIZE), search })}`,
+    `/projects/${projectId}/customers/${query({ page: String(page), page_size: String(CUSTOMER_PAGE_SIZE), search, assignment })}`,
     customerPageSchema,
   )
 }

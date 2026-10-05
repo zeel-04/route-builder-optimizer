@@ -14,7 +14,9 @@ from rest_framework.viewsets import ViewSet
 from api.customers.models import Customer
 from api.customers.selectors import (
     customer_filter_options,
+    customer_assignment_summary,
     customer_list,
+    filter_customer_assignment,
     project_customer_list,
 )
 from api.customers.serializers.customer_serializers import (
@@ -38,6 +40,15 @@ from api.projects.models import Project
 
 
 class CustomerViewSet(ViewSet):
+    @action(detail=False, url_path="assignment-summary")
+    def assignment_summary(self, request):
+        filters = CustomerListFilterSerializer(data=request.query_params)
+        filters.is_valid(raise_exception=True)
+        project = get_object_or_404(
+            Project, tenant=request.user.tenant, pk=filters.validated_data["project"]
+        )
+        return Response(customer_assignment_summary(project_customer_list(project=project)))
+
     def list(self, request):
         filters = CustomerListFilterSerializer(data=request.query_params)
         filters.is_valid(raise_exception=True)
@@ -84,10 +95,18 @@ class ProjectCustomerViewSet(ViewSet):
         filters = ProjectCustomerListFilterSerializer(data=request.query_params)
         filters.is_valid(raise_exception=True)
 
+        assignment = filters.validated_data.pop("assignment")
         customers = project_customer_list(project=project, **filters.validated_data)
+        summary = customer_assignment_summary(customers)
+        project_summary = summary if not filters.validated_data["search"] else customer_assignment_summary(
+            project_customer_list(project=project)
+        )
+        customers = filter_customer_assignment(customers, assignment)
         paginator = ProjectCustomerPagination()
         page = paginator.paginate_queryset(customers, request, view=self)
-        return paginator.get_paginated_response(CustomerListOutputSerializer(page, many=True).data)
+        response = paginator.get_paginated_response(CustomerListOutputSerializer(page, many=True).data)
+        response.data.update(assignment_summary=summary, project_summary=project_summary)
+        return response
 
     @action(detail=False)
     def export(self, request, project_pk=None):

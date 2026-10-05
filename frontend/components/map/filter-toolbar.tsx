@@ -1,12 +1,12 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useRef, useState, useTransition, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { Badge } from '@astryxdesign/core/Badge'
 import { LayoutHeader } from '@astryxdesign/core/Layout'
 import { Selector } from '@astryxdesign/core/Selector'
 import { Spinner } from '@astryxdesign/core/Spinner'
-import { HStack } from '@astryxdesign/core/Stack'
+import { HStack, VStack } from '@astryxdesign/core/Stack'
 import { Text } from '@astryxdesign/core/Text'
 import { TextInput } from '@astryxdesign/core/TextInput'
 import { Tooltip } from '@astryxdesign/core/Tooltip'
@@ -23,6 +23,7 @@ type Props = {
   notFound: number
   /** Pinned at the ZIP code because the street wasn't found. */
   approximate: number
+  children?: ReactNode
 }
 
 /** A text filter mirrored into the URL (debounced); `applied` is its current URL value. */
@@ -55,7 +56,7 @@ function useDebouncedFilter(
   return [text, setText] as const
 }
 
-export function FilterToolbar({ projectName, filters, options, total, pending, notFound, approximate }: Props) {
+export function FilterToolbar({ projectName, filters, options, total, pending, notFound, approximate, children }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
@@ -95,84 +96,87 @@ export function FilterToolbar({ projectName, filters, options, total, pending, n
 
   return (
     <LayoutHeader hasDivider>
-      <HStack gap={2} wrap="wrap" align="center" justify="between">
-        <HStack gap={2} wrap="wrap" align="center">
-          <Text weight="semibold">{projectName}</Text>
-          <Selector
-            size="sm"
-            width={110}
-            label="State"
-            isLabelHidden
-            placeholder="State"
-            options={options.states}
-            value={filters.state || null}
-            hasClear
-            onChange={(value) => apply({ state: value ?? '', county: '', city: '' })}
-          />
-          <Selector
-            size="sm"
-            width={170}
-            label="County"
-            isLabelHidden
-            placeholder="County"
-            options={options.counties}
-            value={filters.county || null}
-            hasClear
-            hasSearch
-            onChange={(value) => apply({ county: value ?? '', city: '' })}
-          />
-          <Selector
-            size="sm"
-            width={170}
-            label="City"
-            isLabelHidden
-            placeholder="City"
-            options={options.cities}
-            value={filters.city || null}
-            hasClear
-            hasSearch
-            onChange={(value) => apply({ city: value ?? '' })}
-          />
-          <TextInput
-            size="sm"
-            width={220}
-            label="Search address"
-            isLabelHidden
-            placeholder="Search address"
-            startIcon="search"
-            value={search}
-            onChange={setSearch}
-            hasClear
-            isLoading={isPending}
-          />
-          <TextInput
-            size="sm"
-            width={110}
-            label="ZIP code"
-            isLabelHidden
-            placeholder="ZIP code"
-            value={zipcode}
-            onChange={setZipcode}
-            hasClear
-          />
+      <VStack gap={2}>
+        <HStack gap={2} wrap="wrap" align="center" justify="between">
+          <HStack gap={2} wrap="wrap" align="center">
+            <Text weight="semibold">{projectName}</Text>
+            <Selector
+              size="sm"
+              width={110}
+              label="State"
+              isLabelHidden
+              placeholder="State"
+              options={options.states}
+              value={filters.state || null}
+              hasClear
+              onChange={(value) => apply({ state: value ?? '', county: '', city: '' })}
+            />
+            <Selector
+              size="sm"
+              width={170}
+              label="County"
+              isLabelHidden
+              placeholder="County"
+              options={options.counties}
+              value={filters.county || null}
+              hasClear
+              hasSearch
+              onChange={(value) => apply({ county: value ?? '', city: '' })}
+            />
+            <Selector
+              size="sm"
+              width={170}
+              label="City"
+              isLabelHidden
+              placeholder="City"
+              options={options.cities}
+              value={filters.city || null}
+              hasClear
+              hasSearch
+              onChange={(value) => apply({ city: value ?? '' })}
+            />
+            <TextInput
+              size="sm"
+              width={220}
+              label="Search address"
+              isLabelHidden
+              placeholder="Search address"
+              startIcon="search"
+              value={search}
+              onChange={setSearch}
+              hasClear
+              isLoading={isPending}
+            />
+            <TextInput
+              size="sm"
+              width={110}
+              label="ZIP code"
+              isLabelHidden
+              placeholder="ZIP code"
+              value={zipcode}
+              onChange={setZipcode}
+              hasClear
+            />
+          </HStack>
+          <HStack gap={2} align="center">
+            {isMapping && <Spinner size="sm" aria-label="Mapping customers" />}
+            <Text type="supporting">
+              {total} {total === 1 ? 'customer' : 'customers'}
+              {isMapping ? ` · Mapping ${pending}…` : ''}
+              {notFound > 0 ? ` · ${notFound} ${notFound === 1 ? 'address' : 'addresses'} not found` : ''}
+            </Text>
+            {approximate > 0 && (
+              <Tooltip content="Street not found. These pins are at the ZIP code.">
+                <Badge
+                  variant="warning"
+                  label={`${approximate} approximate ${approximate === 1 ? 'location' : 'locations'}`}
+                />
+              </Tooltip>
+            )}
+          </HStack>
         </HStack>
-        <HStack gap={2} align="center">
-          {isMapping && <Spinner size="sm" aria-label="Mapping customers" />}
-          <Text type="supporting">
-            {total} {total === 1 ? 'customer' : 'customers'}
-            {isMapping ? ` · Mapping ${pending}…` : ''}
-            {notFound > 0 ? ` · ${notFound} ${notFound === 1 ? 'address' : 'addresses'} not found` : ''}
-          </Text>
-          {approximate > 0 && (
-            <Tooltip content="Street not found. These pins are at the ZIP code.">
-              <Badge
-                variant="warning"
-                label={`${approximate} approximate ${approximate === 1 ? 'location' : 'locations'}`}
-              />
-            </Tooltip>
-          )}
-        </HStack>
-      </HStack>
+        {children}
+      </VStack>
     </LayoutHeader>
   )
 }
